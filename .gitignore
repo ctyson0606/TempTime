@@ -13,3 +13,26 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+
+# Dependencies
+/node_modules
+
+# Next.js build output
+/.next/
+/out/
+/build
+next-env.d.ts
+*.tsbuildinfo
+
+# Test output
+/coverage
+
+# Environment — never commit real credentials, see .env.example
+.env*
+!.env.example
+
+# Deployment
+.vercel
+
+# Logs
+npm-debug.log*

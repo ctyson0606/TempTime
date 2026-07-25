@@ -1,0 +1,174 @@
+import { DateTime } from 'luxon'
+import { ISO_DATE } from './dates'
+
+/**
+ * Everything needed to lay out a room's grid.
+ *
+ * `dates` is an explicit ascending list, not a range. A `dayIndex` is a position
+ * in that array, never a calendar offset — a room covering 07-26, 07-27 and
+ * 08-15 has dayIndex 0, 1, 2, and the days in between do not exist on the grid.
+ */
+export interface RoomGrid {
+  timezone: string
+  dates: readonly string[]
+  dayStartMin: number
+  dayEndMin: number
+  slotMinutes: number
+}
+
+/** The shape `blocksToMask` consumes. `BusyBlock` satisfies it structurally. */
+export interface TimeInterval {
+  start: Date
+  end: Date
+}
+
+const MINUTES_PER_DAY = 1440
+
+export function slotsPerDay(room: RoomGrid): number {
+  return (room.dayEndMin - room.dayStartMin) / room.slotMinutes
+}
+
+export function totalSlots(room: RoomGrid): number {
+  return room.dates.length * slotsPerDay(room)
+}
+
+export function slotDate(room: RoomGrid, dayIndex: number): string {
+  const date = room.dates[dayIndex]
+  if (date === undefined) {
+    throw new RangeError(`dayIndex ${dayIndex} outside ${room.dates.length} dates`)
+  }
+  return date
+}
+
+/**
+ * Resolve a wall-clock minute-of-day on a given calendar date.
+ *
+ * Built with `fromObject` rather than by adding minutes to midnight, because
+ * users reason in wall time: 08:00 means 08:00 on the clock even on the day a
+ * DST transition makes that day 23 or 25 hours long. Adding a duration would
+ * drift by an hour on those two days a year.
+ *
+ * `minuteOfDay` may be 1440 (midnight ending the day), which is why the day
+ * rolls over explicitly instead of relying on hour 24.
+ */
+function wallTime(room: RoomGrid, date: string, minuteOfDay: number): DateTime {
+  const base = DateTime.fromFormat(date, ISO_DATE, { zone: room.timezone })
+  if (!base.isValid) {
+    throw new RangeError(`invalid room date: ${date}`)
+  }
+  const dayRollover = Math.floor(minuteOfDay / MINUTES_PER_DAY)
+  const minute = minuteOfDay % MINUTES_PER_DAY
+  return DateTime.fromObject(
+    {
+      year: base.year,
+      month: base.month,
+      day: base.day,
+      hour: Math.floor(minute / 60),
+      minute: minute % 60,
+    },
+    { zone: room.timezone },
+  ).plus({ days: dayRollover })
+}
+
+export function slotStart(room: RoomGrid, index: number): DateTime {
+  return slotRange(room, index).start
+}
+
+export function slotRange(
+  room: RoomGrid,
+  index: number,
+): { start: DateTime; end: DateTime } {
+  const perDay = slotsPerDay(room)
+  if (!Number.isInteger(index) || index < 0 || index >= totalSlots(room)) {
+    throw new RangeError(`slot ${index} outside grid of ${totalSlots(room)}`)
+  }
+  const date = slotDate(room, Math.floor(index / perDay))
+  const offset = index % perDay
+  const startMin = room.dayStartMin + offset * room.slotMinutes
+  return {
+    start: wallTime(room, date, startMin),
+    end: wallTime(room, date, startMin + room.slotMinutes),
+  }
+}
+
+/** Every slot's bounds, in index order. Cheap enough to rebuild per call. */
+export function allSlotRanges(
+  room: RoomGrid,
+): Array<{ start: DateTime; end: DateTime }> {
+  const ranges = []
+  for (let i = 0; i < totalSlots(room); i++) ranges.push(slotRange(room, i))
+  return ranges
+}
+
+/**
+ * Instant to slot index, or `null` when it falls outside the grid.
+ *
+ * This is a lookup, not arithmetic. A contiguous room could subtract two dates
+ * to get a dayIndex; with days chosen freely the date has to be found in
+ * `dates`, and a miss means the instant is simply not on the grid. Getting this
+ * wrong makes events vanish silently rather than throwing, so it is covered
+ * directly by tests.
+ */
+export function timeToSlot(room: RoomGrid, at: DateTime): number | null {
+  const local = at.setZone(room.timezone)
+  if (!local.isValid) return null
+
+  const dayIndex = room.dates.indexOf(local.toFormat(ISO_DATE))
+  if (dayIndex < 0) return null
+
+  const minuteOfDay = local.hour * 60 + local.minute
+  if (minuteOfDay < room.dayStartMin || minuteOfDay >= room.dayEndMin) return null
+
+  const offset = Math.floor((minuteOfDay - room.dayStartMin) / room.slotMinutes)
+  return dayIndex * slotsPerDay(room) + offset
+}
+
+/**
+ * Collapse busy intervals into the room's 0/1 mask.
+ *
+ * Deliberately conservative: a slot is busy if any interval overlaps it at all.
+ * Over-reporting busy costs a candidate meeting time; under-reporting books over
+ * something real.
+ *
+ * Intervals are half-open, so an event ending exactly when a slot begins leaves
+ * that slot free. Anything outside the grid — including the middle of an
+ * interval that spans days the room did not select — is dropped rather than
+ * clamped.
+ *
+ * Scans every slot against every interval instead of mapping interval edges to
+ * indices. At 224 slots the cost is irrelevant, and it removes the class of bug
+ * where edge-mapping quietly mishandles a gap in `dates`.
+ */
+export function blocksToMask(
+  room: RoomGrid,
+  blocks: readonly TimeInterval[],
+): string {
+  const total = totalSlots(room)
+  const mask = new Array<string>(total).fill('0')
+  const ranges = allSlotRanges(room).map((r) => ({
+    start: r.start.toMillis(),
+    end: r.end.toMillis(),
+  }))
+
+  for (const block of blocks) {
+    const from = block.start.getTime()
+    const to = block.end.getTime()
+    // Zero-length and inverted intervals occupy no time and mark nothing.
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) continue
+
+    for (let i = 0; i < total; i++) {
+      if (mask[i] === '1') continue
+      if (from < ranges[i].end && to > ranges[i].start) mask[i] = '1'
+    }
+  }
+
+  return mask.join('')
+}
+
+export function emptyMask(room: RoomGrid): string {
+  return '0'.repeat(totalSlots(room))
+}
+
+export function isValidMask(room: RoomGrid, mask: string): boolean {
+  return mask.length === totalSlots(room) && /^[01]*$/.test(mask)
+}
