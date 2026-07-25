@@ -43,10 +43,26 @@ Rules and update semantics as above. The trigger requirement applies to the main
 conversation only. Reason: a delegated run holds context the main thread never
 sees, so deferring the write until the user asks would lose it.
 
+The exception turns on the run being *delegated*, not on the agent definition
+being *visible*. Attaching `.claude/agents/*.md` to a message in the main
+conversation supplies those principles as context and nothing more — the main
+thread still waits for the trigger. Only a genuinely spawned subagent writes on
+its own.
+
 ### Language rule
 
 - Conversation with the user: **Chinese**.
 - All written output — these files, code, comments, commit messages: **English**.
+
+### Verification
+
+A suite that passes on its first run is unverified, not correct. It is equally
+consistent with tests that assert nothing discriminating. Before trusting a new
+suite, break the code it covers on purpose — pick the one or two behaviours most
+likely to be got wrong — confirm the expected tests fail and read *which* ones,
+then revert and re-run.
+
+This is cheap and it is the only evidence that a green suite means anything.
 
 ### Spec changes
 
@@ -59,6 +75,11 @@ the same dependencies.
 
 One case made the rule: extending a lifetime also invalidated an identifier
 length, a rate-limit table and a token expiry, none of which said "lifetime".
+
+The reverse direction has its own rule. When a tool's current output differs from
+what the spec names — a newer major version, a renamed flag — and the reason the
+spec gave for the choice still holds, change the spec. Pinning backwards to make
+a document true costs more than editing the document.
 
 ### Git and publishing
 
@@ -114,6 +135,12 @@ Update semantics:
 - Agent definitions live in `.claude/agents/`, tracked in git. They carry
   principles of *how* work is done; anything situational stays in the two memory
   files.
+- **Caller errors return, configuration errors throw.** A bad credential or
+  malformed input is the caller's problem: return `null` or a typed result the
+  route maps to a status code, without revealing which check failed. A missing or
+  malformed secret is our deployment problem: throw at the call site so it
+  surfaces on the first request instead of degrading into blanket 401s that look
+  like users mistyping.
 
 ---
 
@@ -133,10 +160,29 @@ Update semantics:
   already holds all three, and an absolute local path is published to the remote
   on the next push. A `Context Notes` section written this way was deleted for
   exactly this reason.
+- **Running a scaffolding generator inside a populated project directory.**
+  Generators write files under conventional names — `README.md`, `.gitignore`,
+  `CLAUDE.md`, `AGENTS.md` — and will either refuse to run or overwrite what is
+  already there. Generate into the scratchpad, then copy in only what is wanted
+  and merge the rest by hand.
+- **Running `npm audit fix --force` on what it reports.** It optimises for zero
+  advisories, not for a working project: on this repo it proposed resolving three
+  advisories in Next.js's own bundled dependencies by downgrading Next from 16 to
+  9.3.3. Read the proposed changes; a transitive advisory inside a framework's
+  pinned dependencies is usually the framework's to fix, not ours.
 - **Spot-fixing a spec when a core assumption changes.** Editing only the section
   that names the assumption leaves every value quietly sized against it wrong,
   and those are the ones that fail silently later rather than loudly now. See
   Workflow → Spec changes.
+- **Decoding a stored hash before validating its shape.** `Buffer.from(s, 'hex')`
+  truncates at the first invalid character rather than failing, so a stored hash
+  with trailing garbage decodes to the same bytes as the genuine one and
+  `timingSafeEqual` returns true — an authentication bypass. Match the expected
+  format with a regex first. Every happy-path test still passed; only deliberately
+  breaking the guard exposed it.
+- **Calling `jwtVerify` without an `algorithms` allow-list.** It then trusts the
+  token's own `alg` header. Demonstrated here: with the allow-list removed, a
+  token signed HS512 passed a verifier that must only accept HS256.
 - **PowerShell here-strings (`@'...'@`) in the Bash tool.** Bash does not parse
   them; the `@` characters end up inside the string. This silently corrupted a
   commit message. Two shells are available in this environment and each needs its
