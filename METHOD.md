@@ -48,6 +48,16 @@ sees, so deferring the write until the user asks would lose it.
 - Conversation with the user: **Chinese**.
 - All written output — these files, code, comments, commit messages: **English**.
 
+### Git and publishing
+
+- Commit and push only when the user asks for it.
+- Before the first push of a set of new files, audit what is about to leave the
+  machine: credentials and API keys, machine-local tool settings, and absolute
+  local paths. Report the findings and get approval **before** committing, not
+  after.
+- Multi-line commit messages go through a file: write it to the scratchpad and
+  use `git commit -F <file>`. Do not pass a multi-line `-m` inline.
+
 ---
 
 ## Decision Rules
@@ -101,3 +111,11 @@ Update semantics:
   commands and current goals hardcoded into `.claude/agents/` become a third
   memory store that silently goes stale. Agent files state principles and point
   at the memory files for the rest.
+- **Recording the repository's location, branch or commit in `STATE.md`.** git
+  already holds all three, and an absolute local path is published to the remote
+  on the next push. A `Context Notes` section written this way was deleted for
+  exactly this reason.
+- **PowerShell here-strings (`@'...'@`) in the Bash tool.** Bash does not parse
+  them; the `@` characters end up inside the string. This silently corrupted a
+  commit message. Two shells are available in this environment and each needs its
+  own syntax — see Git and publishing for the commit-message form.

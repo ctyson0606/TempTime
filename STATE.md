@@ -10,16 +10,21 @@ archived — git holds the history. For durable rules and workflow, see
 
 ## Current Focus
 
-Setting up the project's memory structure. The repository is otherwise empty:
-`LICENSE` and one initial commit, no source code yet.
+The memory structure is in place and published. The project still has no source
+code and no defined purpose — that is the next thing to settle.
 
 ---
 
 ## Status
 
 **Done**
-- `METHOD.md` and `STATE.md` created at the project root, with the memory
-  protocol itself as the first entry in `METHOD.md`.
+- Two-file memory in place: [METHOD.md](METHOD.md) (workflow, decision rules,
+  anti-patterns) and this file.
+- `CLAUDE.md` as a pointer-only loader, and a `temptime-engineer` agent
+  definition holding principles only.
+- `.gitignore` covering machine-local Claude settings, OS metadata and editor
+  state.
+- All of the above committed and pushed to `origin/main`.
 
 **In Progress**
 - Nothing.
@@ -51,3 +56,7 @@ Setting up the project's memory structure. The repository is otherwise empty:
 - **2026-07-25 — `METHOD.md` + `STATE.md` are the single source of project
   memory.** Claude Code's personal memory store keeps only a pointer to them,
   so the two stores cannot drift apart.
+- **2026-07-25 — `.claude/agents/` is tracked, `.claude/settings.local.json` is
+  ignored.** The agent definition is shared project knowledge and belongs on the
+  remote; the settings file is per-machine permission state and would create
+  noise and conflicts for anyone else cloning the repository.
