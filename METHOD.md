@@ -48,6 +48,18 @@ sees, so deferring the write until the user asks would lose it.
 - Conversation with the user: **Chinese**.
 - All written output — these files, code, comments, commit messages: **English**.
 
+### Spec changes
+
+When a requirement changes after the spec is written, patching the section that
+states it is not enough. Sweep the whole spec for values and safeguards that were
+*sized against* the old assumption — those never mention it by name, so they do
+not surface by search. Then record the relaxed assumption and its blast radius in
+a dedicated section of the spec, so the next change does not have to rediscover
+the same dependencies.
+
+One case made the rule: extending a lifetime also invalidated an identifier
+length, a rate-limit table and a token expiry, none of which said "lifetime".
+
 ### Git and publishing
 
 - Commit and push only when the user asks for it.
@@ -91,6 +103,12 @@ Update semantics:
 - Dates: absolute `YYYY-MM-DD`, never "last week" or "recently".
 - Cross-references between the two files use relative markdown links.
 - `METHOD.md` and `STATE.md` live at the project root and are tracked in git.
+- `PLAN.md` at the project root is the **implementation spec**, not memory: scope,
+  stack, data model, API contract, milestones, verification. It answers *what is
+  being built*; `STATE.md` answers *how far along it is*. It is git-ignored and
+  stays on the local machine, so references to it from `STATE.md` will dangle for
+  anyone who clones the repository — cite it by section number rather than
+  copying its content across, and never mirror its decisions into `STATE.md`.
 - `CLAUDE.md` is **pointer-only**: it imports the two memory files and states the
   language and update-trigger rules. Project knowledge never goes in it.
 - Agent definitions live in `.claude/agents/`, tracked in git. They carry
@@ -115,6 +133,10 @@ Update semantics:
   already holds all three, and an absolute local path is published to the remote
   on the next push. A `Context Notes` section written this way was deleted for
   exactly this reason.
+- **Spot-fixing a spec when a core assumption changes.** Editing only the section
+  that names the assumption leaves every value quietly sized against it wrong,
+  and those are the ones that fail silently later rather than loudly now. See
+  Workflow → Spec changes.
 - **PowerShell here-strings (`@'...'@`) in the Bash tool.** Bash does not parse
   them; the `@` characters end up inside the string. This silently corrupted a
   commit message. Two shells are available in this environment and each needs its

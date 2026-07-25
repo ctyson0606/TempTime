@@ -1,6 +1,9 @@
 # Claude Code local settings — machine-specific, never shared
 .claude/settings.local.json
 
+# Implementation spec — kept local, never pushed
+PLAN.md
+
 # OS metadata
 .DS_Store
 Thumbs.db

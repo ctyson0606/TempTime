@@ -10,53 +10,74 @@ archived — git holds the history. For durable rules and workflow, see
 
 ## Current Focus
 
-The memory structure is in place and published. The project still has no source
-code and no defined purpose — that is the next thing to settle.
+TempTime now has a defined product and a complete implementation spec in
+`PLAN.md`: a registration-free tool for aligning free time across several people,
+whose selling point is importing busy blocks from the calendars users already
+have and letting them uncheck individual entries before anything is sent. No
+source code exists yet. The immediate blocker is how the database gets
+provisioned.
 
 ---
 
 ## Status
 
 **Done**
-- Two-file memory in place: [METHOD.md](METHOD.md) (workflow, decision rules,
-  anti-patterns) and this file.
-- `CLAUDE.md` as a pointer-only loader, and a `temptime-engineer` agent
-  definition holding principles only.
-- `.gitignore` covering machine-local Claude settings, OS metadata and editor
-  state.
-- All of the above committed and pushed to `origin/main`.
+- Two-file memory in place: [METHOD.md](METHOD.md) and this file, alongside a
+  pointer-only `CLAUDE.md` and a `temptime-engineer` agent definition.
+- `PLAN.md` written and then revised for a change of requirements covering room
+  lifetime and date selection. The four relaxed assumptions and everything each
+  one touched are recorded in `PLAN.md` §14 — not restated here.
 
 **In Progress**
-- Nothing.
+- Nothing. No scaffold, no source files.
 
 **Blocked**
-- Nothing.
+- The API layer of milestone M1 and every end-to-end check, pending the database
+  question below. The pure-logic modules are not blocked by it.
 
 ---
 
 ## Next Steps
 
-1. Define what TempTime is and what it should do.
-2. Choose the language and runtime, then scaffold the project accordingly.
+1. Answer the database question below.
+2. Scaffold Next.js 15 + TypeScript + Tailwind (`PLAN.md` §11, M1).
+3. Build the pure-logic modules and their tests — `lib/dates.ts`,
+   `lib/roomCode.ts`, `lib/slots.ts`, `lib/aggregate.ts`. These touch no database
+   and can proceed before step 1 resolves.
 
 ---
 
 ## Open Questions
 
-- What is the intended scope and purpose of TempTime? Nothing in the repository
-  indicates it yet.
+- **How does Postgres get provisioned?** Three options were put to the user and
+  none was chosen: a Supabase cloud project, Supabase CLI running locally under
+  Docker, or an in-memory storage adapter that defers the choice. The user's
+  stated concern was whether every end user would need an account — they do not;
+  one project serves every room, and only the operator holds an account.
+- **Can an HS256 JWT secret be obtained from the Supabase project?** Unknown
+  until a project exists. If it cannot, Realtime degrades to polling
+  (`PLAN.md` §5). Worth checking before the realtime layer is built, not after.
 
 ---
 
 ## Recent Decisions
 
-- **2026-07-25 — Memory files live at the project root, tracked in git.**
-  Chosen over `.claude/` so the user can open them directly and so they travel
-  with the repository. No conflict with a future `CLAUDE.md`.
-- **2026-07-25 — `METHOD.md` + `STATE.md` are the single source of project
-  memory.** Claude Code's personal memory store keeps only a pointer to them,
-  so the two stores cannot drift apart.
-- **2026-07-25 — `.claude/agents/` is tracked, `.claude/settings.local.json` is
-  ignored.** The agent definition is shared project knowledge and belongs on the
-  remote; the settings file is per-machine permission state and would create
-  noise and conflicts for anyone else cloning the repository.
+Earlier entries about the memory structure itself were dropped: their outcome is
+now stated as convention in [METHOD.md](METHOD.md), and repeating it here would
+be the duplication that file warns against.
+
+- **2026-07-25 — `PLAN.md` is the implementation spec and stays local.**
+  Git-ignored at the user's request. This file cites it by section number instead
+  of copying it, so the two cannot drift.
+- **2026-07-25 — Room lifetime is derived from the dates chosen, not fixed at 24
+  hours.** A room is destroyed when its creator deletes it, or once every date it
+  covers has passed. Reason: the user wants rooms that can be planned months
+  ahead rather than used once and discarded. See `PLAN.md` §4.3.
+- **2026-07-25 — Dates are an explicit array, not a contiguous range.** Any days
+  within the next 90 days, up to `MAX_ROOM_DAYS = 7`, not necessarily adjacent.
+  The cap is a single constant precisely because the user expects to raise it.
+  See `PLAN.md` §3.1.
+- **2026-07-25 — Only a room's creator can delete it, using a secret issued once
+  at creation.** Letting any member delete was rejected: one mistaken click
+  destroys everyone's submissions, which is an asymmetric cost. See `PLAN.md`
+  §2.4.
