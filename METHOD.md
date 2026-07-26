@@ -64,6 +64,19 @@ then revert and re-run.
 
 This is cheap and it is the only evidence that a green suite means anything.
 
+**A probe whose outcomes cannot differ proves nothing.** Confirming a credential
+by watching a request fail says only that something failed. Two rounds were lost
+this way: a JWT secret was tested against an endpoint that rejects every
+publishable key regardless of the token, so the real secret and a deliberately
+wrong one both returned an identical 401 and the value looked broken when it was
+merely untested. Pick a target where success and failure look different, and run
+the known-bad control in the same breath as the real one — if they match, the
+test has not started yet.
+
+The corollary is that a credential is not verified by where it was copied from.
+A dashboard shows a key's ID next to its value, and the ID sailed through our own
+length guard; only the live service could tell them apart.
+
 **UI is verified by driving it, not by reading it.** A component that type-checks
 and builds has been proven to compile, nothing more. Drive the running app in a
 real browser, assert on what the DOM actually says — computed styles, element
@@ -165,6 +178,12 @@ Update semantics:
   was chosen over `jsonwebtoken`. Server-only primitives with no Web Crypto
   equivalent — `timingSafeEqual`, for one — are the exception, and they belong in
   modules that never reach the client bundle.
+- **Migrations are re-runnable.** `drop policy if exists` before each
+  `create policy`, an existence check around anything that appends to a
+  publication or a schedule. A migration gets edited after it has already been
+  applied — the first one here did, within an hour — and the alternative is
+  hand-picking which statements to skip, in a SQL console, against the live
+  database.
 - **Caller errors return, configuration errors throw.** A bad credential or
   malformed input is the caller's problem: return `null` or a typed result the
   route maps to a status code, without revealing which check failed. A missing or
@@ -230,6 +249,13 @@ Update semantics:
   string and the fallback never runs. Found when refactoring the grid: cells lost
   their background because the painter returned `''` for "nothing special here".
   Either return `undefined` and mean it, or test for the value you actually get.
+- **Assuming a role that bypasses RLS can also reach the table.** They are two
+  independent layers: the GRANT decides whether the role may touch the table at
+  all, the policy decides which rows. With a project's "expose new tables"
+  default turned off, the server role held no privilege on anything and every
+  insert came back as a flat `permission denied`, which reads like a policy bug
+  and is not one. Grant the server role explicitly, and never conclude from
+  "this role ignores RLS" that it needs nothing else.
 - **PowerShell here-strings (`@'...'@`) in the Bash tool.** Bash does not parse
   them; the `@` characters end up inside the string. This silently corrupted a
   commit message. Two shells are available in this environment and each needs its

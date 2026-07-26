@@ -14,9 +14,11 @@ export const JWT_ALGORITHM = 'HS256'
  * audience and a matching `role` claim, and the same token is handed to the
  * Supabase client for Realtime (PLAN.md section 2.3).
  *
- * UNVERIFIED: no Supabase project exists yet, so this has not been checked
- * against a live instance. If Realtime rejects these tokens, this is the first
- * place to look.
+ * Verified against a live project on 2026-07-26: PostgREST accepts a token
+ * carrying exactly these claims and rejects one signed with a different secret.
+ *
+ * UNVERIFIED for Realtime, which validates separately from PostgREST. If
+ * Realtime rejects a token PostgREST accepts, this is the first place to look.
  */
 export const JWT_AUDIENCE = 'authenticated'
 
