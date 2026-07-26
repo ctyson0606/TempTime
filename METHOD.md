@@ -90,6 +90,15 @@ what the spec names — a newer major version, a renamed flag — and the reason
 spec gave for the choice still holds, change the spec. Pinning backwards to make
 a document true costs more than editing the document.
 
+**A spec that names a vendor prices the next comparison.** Once the schema, the
+security model, the milestones and the verification steps are all written against
+one product, moving to a technically similar one is not a change of connection
+string: it is a sweep of every section that was sized against the old choice,
+paid before a line of new code is written. That cost belongs *inside* the
+comparison, not discovered after it. It can still be worth paying — but say so
+with the number attached, and be honest that "we already wrote it this way" is a
+real reason rather than a technical one.
+
 ### Git and publishing
 
 - Commit and push only when the user asks for it.

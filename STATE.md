@@ -52,8 +52,9 @@ between this and a product.
 
 ## Next Steps
 
-1. Answer the database question below. It unblocks everything else, and it is the
-   only step that cannot be done from this side.
+1. Settle where the data lives — see the first open question below. It unblocks
+   everything else, and choosing is the one step that cannot be done from this
+   side.
 2. With a database: the M1 routes, then `POST /submit`, then the heatmap and
    `BestSlots` on real submissions. Deleting `lib/demoRoom.ts` is part of that
    work, not a follow-up.
@@ -64,16 +65,41 @@ between this and a product.
 
 ## Open Questions
 
-- **How does Postgres get provisioned?** Three options were put to the user and
-  none was chosen: a Supabase cloud project, Supabase CLI running locally under
-  Docker, or an in-memory storage adapter that defers the choice. The user's
-  stated concern was whether every end user would need an account — they do not;
-  one project serves every room, and only the operator holds an account.
-- **Will Supabase accept our room tokens?** Two unknowns, both unanswerable until
-  a project exists. First, whether an HS256 JWT secret can be obtained at all; if
-  not, Realtime degrades to polling (`PLAN.md` §5). Second, whether the
-  `role` and `aud` claims we sign are what Realtime's RLS actually requires —
+- **Where does the data live?** Still unanswered, and still the only thing
+  blocking every remaining item. The option set, after being widened on
+  2026-07-26:
+
+  | Option | What it buys | What it costs |
+  |---|---|---|
+  | Supabase | The spec is already written against it; Realtime included | Free projects pause after a week idle, and rooms live for months |
+  | Neon or Vercel Postgres | Plain Postgres, wakes on connection | No push, so Realtime becomes polling |
+  | Local Postgres in Docker | No account, no card, nothing leaves the machine | Only reachable from that machine, so no two-person test |
+  | Upstash Redis | TTL *is* room expiry, which deletes `PLAN.md` §4.3 entirely | Not SQL: the data model is rewritten, and no push |
+  | Self-hosted VPS | Full control | Backups, updates and TLS become ours |
+
+  The requirements are smaller than they look: every write already goes through a
+  Route Handler, so nothing but Realtime needs the client to touch the database
+  at all, and dropping push to polling makes the store a commodity.
+
+  **The honest argument for Supabase is now the spec, not the technology** — see
+  METHOD.md → Spec changes. Switching means sweeping `PLAN.md` §4, §5, §7.2 and
+  the M4 milestones first.
+
+  What the user still has to answer: is the goal right now to run the whole flow
+  alone, or to send a friend a link? The first points at Docker, the second at
+  Supabase.
+- **Will Supabase accept our room tokens?** Only matters if Supabase is chosen,
+  and unanswerable until a project exists. First, whether an HS256 JWT secret can
+  be obtained at all; if not, Realtime degrades to polling (`PLAN.md` §5) — which
+  also removes Supabase's main advantage over a plain Postgres. Second, whether
+  the `role` and `aud` claims we sign are what Realtime's RLS actually requires —
   `lib/jwt.ts` carries an `UNVERIFIED` comment at the exact constant to check.
+- **Where does the app itself run?** Independent of the store, and deferrable:
+  development runs locally. Two things are known. A public URL is a precondition
+  for the two-browser acceptance test in `PLAN.md` §12 — a friend cannot reach
+  `localhost`. And Vercel's free tier runs scheduled jobs once a day, not hourly,
+  so the `api/cron/purge` backup is coarser there than `PLAN.md` §4.3 assumes;
+  the primary database-side schedule is unaffected.
 - **Is a dragged block the right gesture?** Dragging marks a rectangle of
   day × time-of-day, so "Saturday 09:00 to Monday 10:00" means those three
   mornings. The alternative is painting whichever cells the pointer passes over,
