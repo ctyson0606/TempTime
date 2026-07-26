@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import { supabaseJwtSecret } from './env'
+import { type RoomTokenClaims, verifyRoomToken } from './jwt'
 import { type RateLimitName, checkRateLimit, clientIp } from './rateLimit'
 import { roomCodeSchema } from './schemas'
 
@@ -14,6 +16,7 @@ export type ApiErrorCode =
   | 'INVALID_CODE'
   | 'ROOM_NOT_FOUND'
   | 'ROOM_EXPIRED'
+  | 'UNAUTHORIZED'
   | 'FORBIDDEN'
   | 'CODE_COLLISION'
   | 'SERVER_ERROR'
@@ -24,6 +27,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   INVALID_CODE: 400,
   ROOM_NOT_FOUND: 404,
   ROOM_EXPIRED: 410,
+  UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   CODE_COLLISION: 503,
   SERVER_ERROR: 500,
@@ -56,6 +60,30 @@ export async function readJson(request: Request): Promise<unknown | null> {
   } catch {
     return null
   }
+}
+
+/**
+ * The member behind a `Authorization: Bearer` header, or `null`.
+ *
+ * The token is checked against the room being addressed, not just for being
+ * well formed: a valid token for another room is exactly what a member of one
+ * room would replay against another, and it must not work. Every rejection
+ * returns the same `null`, so nothing distinguishes a forged token from an
+ * expired one from a token belonging elsewhere.
+ */
+export async function roomMember(
+  request: Request,
+  roomId: string,
+): Promise<RoomTokenClaims | null> {
+  const header = request.headers.get('authorization')
+  if (!header?.startsWith('Bearer ')) return null
+
+  const claims = await verifyRoomToken(
+    header.slice('Bearer '.length),
+    supabaseJwtSecret(),
+  )
+  if (claims === null || claims.roomId !== roomId) return null
+  return claims
 }
 
 export function parseRoomCode(raw: string): string | null {

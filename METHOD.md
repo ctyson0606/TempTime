@@ -77,6 +77,12 @@ The corollary is that a credential is not verified by where it was copied from.
 A dashboard shows a key's ID next to its value, and the ID sailed through our own
 length guard; only the live service could tell them apart.
 
+The same trap hides inside assertions that pass. `restored === painted` reported
+success while both were zero — a comparison satisfied by two absences, which is
+the shape every equality check takes when the thing being measured never
+appeared. Anchor on a value known to be non-empty (`restored > 0 && restored ===
+painted`) so that finding nothing fails instead of agreeing with itself.
+
 **UI is verified by driving it, not by reading it.** A component that type-checks
 and builds has been proven to compile, nothing more. Drive the running app in a
 real browser, assert on what the DOM actually says — computed styles, element
@@ -178,6 +184,11 @@ Update semantics:
   was chosen over `jsonwebtoken`. Server-only primitives with no Web Crypto
   equivalent — `timingSafeEqual`, for one — are the exception, and they belong in
   modules that never reach the client bundle.
+- **An empty answer is not a missing one.** Withdrawing a submission deletes the
+  row rather than blanking the mask, because all-zero means "free the whole
+  time" — a real answer someone chose — and the aggregate counts the two
+  differently. Wherever a value can legitimately be empty, absence needs its own
+  representation rather than sharing one with the empty value.
 - **Migrations are re-runnable.** `drop policy if exists` before each
   `create policy`, an existence check around anything that appends to a
   publication or a schedule. A migration gets edited after it has already been
@@ -249,6 +260,13 @@ Update semantics:
   string and the fallback never runs. Found when refactoring the grid: cells lost
   their background because the painter returned `''` for "nothing special here".
   Either return `undefined` and mean it, or test for the value you actually get.
+- **Treating a valid signature as authorisation.** Verifying a token proves who
+  minted it and that it has not expired — not that it belongs to the thing being
+  addressed. Removing one comparison of the token's own room against the room in
+  the URL let a member of one room write into another and get a 200 back. Bind
+  every credential to the resource, and test it with a token that is genuinely
+  valid for somewhere else, because a forged or expired one exercises a
+  different branch entirely.
 - **Assuming a role that bypasses RLS can also reach the table.** They are two
   independent layers: the GRANT decides whether the role may touch the table at
   all, the policy decides which rows. With a project's "expose new tables"

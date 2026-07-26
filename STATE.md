@@ -10,14 +10,17 @@ archived — git holds the history. For durable rules and workflow, see
 
 ## Current Focus
 
-The store question is settled and answered in code: a Supabase project exists,
-all three migrations are applied, and the four M1 routes create, read, join and
-delete a real room. A room's data now survives leaving the browser.
+Everything one member does now runs against the server. Create a room, send the
+link, join it from another browser, paint or import your busy time, untick what
+is private, send it, change your mind, withdraw. The stand-in is gone; two
+browsers really do share a room, and it has been driven end to end rather than
+reasoned about.
 
-The front end has not caught up. Every page still reads `lib/demoRoom.ts`, so
-what a user can actually do is unchanged from before the database existed —
-rooms live in one browser. Connecting the UI to the routes and deleting the
-stand-in is the single thing between here and the M1 acceptance test.
+What is missing is the other half of the product: **seeing anyone else.** Masks
+are stored but nothing reads them back in aggregate, so a room with four members
+still shows each of them only their own answer. `GET /heatmap` and the three
+components that draw it are the next thing, and they are the last piece before
+the app does what it exists to do.
 
 ---
 
@@ -34,19 +37,25 @@ stand-in is the single thing between here and the M1 acceptance test.
   `lib/providers/manual.ts`, `lib/providers/ics.ts`, `lib/importCache.ts`.
 - UI: create-room page with a month `DatePicker`, room page with a three-size
   grid, QR and admin links, join-by-name, owner-only delete, `ManualPainter`,
-  `SourcePicker` and `PrivacyChecklist` — **all still on the stand-in**.
+  `SourcePicker`, `PrivacyChecklist`, and send / send-again / withdraw — all
+  talking to the real API through `lib/roomClient.ts`.
+- `lib/roomSession.ts` holds what stays in this browser: token, participant id,
+  owner secret, display name, and the unsent draft mask.
 - Live Supabase project: schema, RLS, explicit grants and the hourly `pg_cron`
   purge, all applied and verified against the running database.
 - Server plumbing: `lib/env.ts`, `lib/schemas.ts` (Zod), `lib/rateLimit.ts`,
   `lib/api.ts`, `lib/supabase/server.ts`.
 - Routes: `POST /api/rooms`, `GET` and `DELETE /api/rooms/:code`,
-  `POST /api/rooms/:code/join`.
-- `scripts/verify-rls.mjs` — the repeatable proof of `PLAN.md` §2.2. It creates
-  two rooms in the live database and deletes them, so development only.
-- 205 tests, with `format:check`, `lint`, `typecheck` and `next build` clean.
+  `POST /api/rooms/:code/join`, `POST` and `DELETE /api/rooms/:code/submit`,
+  `GET /api/rooms/:code/my-submission`.
+- Two scripts that verify against the running system, both development-only
+  because they write to the live database: `scripts/verify-rls.mjs` (the
+  repeatable proof of `PLAN.md` §2.2) and `scripts/drive-ui.mjs` (the M1
+  acceptance test in two browser contexts).
+- 196 tests, with `format:check`, `lint`, `typecheck` and `next build` clean.
+  The count fell from 205 because the stand-in's tests went with it.
 - Milestone coverage: `PLAN.md` §11 holds the per-item state; do not duplicate it
-  here. Every M1 item now exists, but its acceptance test still fails, because
-  existing and being wired together are different things.
+  here. M1 and M2 are complete, acceptance tests included.
 
 **In Progress**
 - Nothing. The last task closed cleanly.
@@ -58,14 +67,13 @@ stand-in is the single thing between here and the M1 acceptance test.
 
 ## Next Steps
 
-1. Replace `lib/demoRoom.ts` with `fetch` calls in `CreateRoomForm`, `RoomView`,
-   `JoinDialog` and `RoomAdminBar`, then delete the stand-in and its test. This
-   is what makes `PLAN.md` §11 M1's acceptance test — two browsers, one room —
-   possible at all.
-2. `POST /api/rooms/:code/submit` and `GET /api/rooms/:code/my-submission`, with
-   `isValidMask` checking the length the schema cannot know.
-3. `GET /api/rooms/:code/heatmap`, then `Heatmap`, `BestSlots` and `MemberList`
-   against real submissions.
+1. `GET /api/rooms/:code/heatmap` — `aggregate` and `findBestSlots` already
+   exist and are tested; the route reads every mask with the secret key and
+   returns counts, never an individual mask.
+2. `Heatmap`, `BestSlots` and `MemberList`. The grid already draws a gap between
+   non-adjacent days, so the heatmap inherits it.
+3. Settle the drag gesture before the heatmap is built on top of it — see the
+   open question below.
 4. `lib/realtime.ts` last: it degrades to polling, and polling needs nothing new.
 
 ---
@@ -144,11 +152,20 @@ stand-in is the single thing between here and the M1 acceptance test.
   `PLAN.md` §12 makes privacy verification a required step, and this is the only
   executable form of it: one token, reads `participants`, refused on
   `submissions`. Re-run it after touching RLS.
-- **2026-07-26 — The API has a browser-local stand-in, and it is disposable.**
-  `lib/demoRoom.ts` keeps rooms, names, owner secrets and masks in `localStorage`
-  so the UI could be built before any database existed. It is now the last thing
-  standing between the UI and the real routes, and it is deleted rather than
-  adapted.
+- **2026-07-26 — Withdrawing deletes the submission row rather than blanking the
+  mask.** An all-zero mask is a real answer — "I am free the whole time" — and
+  the aggregate has to count it differently from someone who has not answered.
+  The `submitted_at` column on `participants` moves with it, which is the signal
+  Realtime will push.
+- **2026-07-26 — `sources` is reconstructed at submit time, not tracked through
+  the UI.** It is descriptive metadata that changes no slot, so `deriveSources`
+  works it out from the import cache and the mask instead of threading state up
+  through the painter and the checklist.
+- **2026-07-26 — `scripts/drive-ui.mjs` is kept, and Playwright is a real
+  devDependency.** METHOD.md makes driving the UI the only accepted form of
+  verifying it, and a script that cannot run is worse than none. The cost is a
+  114 MB browser download on a fresh clone. Reversible if that stops being worth
+  it — the script is self-contained.
 - **2026-07-26 — Imported events are cached in `sessionStorage`, not
   `localStorage`.** `lib/importCache.ts` is the only place event titles are
   written down at all. Session scope means they die with the tab; the alternative

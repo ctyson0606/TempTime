@@ -2,21 +2,31 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
-import { DateTime } from 'luxon'
 import { useBrowserValue } from '@/lib/browser'
 import { formatMinuteOfDay } from '@/lib/room'
-import { emptyMask, isValidMask } from '@/lib/slots'
 import {
-  deleteDemoRoom,
-  recallDisplayName,
-  recallMask,
-  recallOwnerSecret,
-  rememberDisplayName,
-  rememberMask,
-  rememberOwnerSecret,
-  snapshotDemoRoom,
-  subscribeDemoStore,
-} from '@/lib/demoRoom'
+  type RoomDetail,
+  deleteRoom,
+  fetchMySubmission,
+  fetchRoom,
+  joinRoom,
+  submitMask,
+  withdrawSubmission,
+} from '@/lib/roomClient'
+import {
+  forgetRoom,
+  readDisplayName,
+  readDraftMask,
+  readOwnerSecret,
+  readParticipantId,
+  readToken,
+  saveDraftMask,
+  saveMembership,
+  saveOwnerSecret,
+  subscribeSession,
+} from '@/lib/roomSession'
+import { loadImport } from '@/lib/importCache'
+import { type RoomGrid, blocksToMask, emptyMask, isValidMask } from '@/lib/slots'
 import BusyInput from './BusyInput'
 import CopyButton from './CopyButton'
 import ExpiryBadge from './ExpiryBadge'
@@ -29,50 +39,223 @@ import SlotGrid, { GRID_CARD_WIDTH, GRID_SIZES, type GridSize } from './SlotGrid
 const COLUMN = 'mx-auto w-full max-w-2xl'
 
 /**
+ * What the page knows about the room. `missing` and `expired` are separate
+ * because they mean different things to whoever is looking: one room was
+ * deleted or never existed, the other has simply run its course, and telling
+ * someone the wrong one sends them looking for a typo that is not there.
+ */
+type Status =
+  | { kind: 'loading' }
+  | { kind: 'ready'; room: RoomDetail }
+  | { kind: 'missing' }
+  | { kind: 'expired' }
+  | { kind: 'deleted' }
+  | { kind: 'error'; message: string }
+
+/**
+ * A malformed code is shown as "no such room" rather than "that is not a code".
+ * Both mean the same thing to someone who mistyped it, and the distinction only
+ * tells a script whether its guess had the right shape.
+ */
+function statusFromFailure(failure: { code: string; error: string }): Status {
+  if (failure.code === 'ROOM_NOT_FOUND' || failure.code === 'INVALID_CODE') {
+    return { kind: 'missing' }
+  }
+  if (failure.code === 'ROOM_EXPIRED') return { kind: 'expired' }
+  return { kind: 'error', message: failure.error }
+}
+
+/**
+ * Which sources this mask came from, worked out rather than tracked.
+ *
+ * `sources` is descriptive metadata — it does not affect a single slot — so
+ * reconstructing it here is cheaper than threading it up through the painter
+ * and the checklist. Anything the ticked imports account for is `ics`; anything
+ * left over was drawn by hand.
+ */
+function deriveSources(room: RoomGrid, code: string, mask: string): string[] {
+  const cached = loadImport(code)
+  const ticked = (cached?.blocks ?? []).filter((block) =>
+    cached?.selected.includes(block.id),
+  )
+  const fromIcs = ticked.length > 0 ? blocksToMask(room, ticked) : null
+
+  const sources: string[] = []
+  if (fromIcs !== null && fromIcs.includes('1')) sources.push('ics')
+  for (let i = 0; i < mask.length; i++) {
+    if (mask[i] === '1' && fromIcs?.[i] !== '1') {
+      sources.push('manual')
+      break
+    }
+  }
+  return sources
+}
+
+/**
  * The room page.
  *
- * Reads the room from the browser-local stand-in store, so nothing here talks to
- * a server yet. The states it can be in — found, never existed, expired, just
- * deleted — are the four the API will report (200 / 404 / 410), which is why they
- * are modelled now rather than bolted on alongside the fetch.
+ * The room itself comes from `GET /api/rooms/:code`, so it is the same room in
+ * every browser. What stays local is only this browser's own membership — the
+ * token, the name, the owner secret if it has one — none of which the server
+ * will hand back (PLAN.md sections 2.3 and 2.4).
  */
 export default function RoomView({ code }: { code: string }) {
   const origin = useBrowserValue(() => window.location.origin)
-  const room = useSyncExternalStore(
-    subscribeDemoStore,
-    () => snapshotDemoRoom(code),
+  const [status, setStatus] = useState<Status>({ kind: 'loading' })
+  const [showQr, setShowQr] = useState(false)
+  const [gridSize, setGridSize] = useState<GridSize>('medium')
+  const [joinError, setJoinError] = useState<string | null>(null)
+  const [joining, setJoining] = useState(false)
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+
+  const token = useSyncExternalStore(
+    subscribeSession,
+    () => readToken(code),
     () => null,
   )
   const displayName = useSyncExternalStore(
-    subscribeDemoStore,
-    () => recallDisplayName(code),
+    subscribeSession,
+    () => readDisplayName(code),
     () => null,
   )
   const ownerSecret = useSyncExternalStore(
-    subscribeDemoStore,
-    () => recallOwnerSecret(code),
+    subscribeSession,
+    () => readOwnerSecret(code),
     () => null,
   )
-  const storedMask = useSyncExternalStore(
-    subscribeDemoStore,
-    () => recallMask(code),
+  const draftMask = useSyncExternalStore(
+    subscribeSession,
+    () => readDraftMask(code),
     () => null,
   )
-  const [deleted, setDeleted] = useState(false)
-  const [showQr, setShowQr] = useState(false)
-  const [gridSize, setGridSize] = useState<GridSize>('medium')
 
   useEffect(() => {
     const fromLink = new URLSearchParams(window.location.search).get('owner')
     if (fromLink === null) return
-    rememberOwnerSecret(code, fromLink)
+    saveOwnerSecret(code, fromLink)
     // Drop the secret from the address bar once it is stored. The creator still
     // has it from the admin bar's copy button, and it keeps the one credential
     // that can destroy the room out of screenshots and browser history.
     window.history.replaceState(null, '', `/r/${code}`)
   }, [code])
 
-  if (deleted) {
+  useEffect(() => {
+    // Guarded rather than fire-and-forget: a reply that arrives after this page
+    // has moved on would otherwise overwrite whatever replaced it.
+    let cancelled = false
+
+    fetchRoom(code).then((result) => {
+      if (cancelled) return
+      if (result.ok) {
+        setStatus({ kind: 'ready', room: result.data })
+        return
+      }
+      // A room this browser can no longer use should not leave a token behind:
+      // every later request would carry a credential that can only fail.
+      if (result.code === 'ROOM_NOT_FOUND' || result.code === 'ROOM_EXPIRED') {
+        forgetRoom(code)
+      }
+      setStatus(statusFromFailure(result))
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [code])
+
+  useEffect(() => {
+    if (token === null) return
+    let cancelled = false
+
+    fetchMySubmission(code, token).then((result) => {
+      if (cancelled || !result.ok) return
+      setSubmittedAt(result.data.updatedAt)
+      // Seed the grid from what was sent, but never over a local draft: an
+      // unsent edit is the more recent intention of the two.
+      if (result.data.busyMask !== null && readDraftMask(code) === null) {
+        saveDraftMask(code, result.data.busyMask)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [code, token])
+
+  const send = async (room: RoomDetail, mask: string) => {
+    if (token === null) return
+    setSubmitting(true)
+    const result = await submitMask(code, token, mask, deriveSources(room, code, mask))
+    setSubmitting(false)
+
+    if (!result.ok) {
+      setSubmitError(result.error)
+      return
+    }
+    setSubmitError(null)
+    setSubmittedAt(result.data.updatedAt)
+  }
+
+  const withdraw = async () => {
+    if (token === null) return
+    setSubmitting(true)
+    const result = await withdrawSubmission(code, token)
+    setSubmitting(false)
+
+    if (!result.ok) {
+      setSubmitError(result.error)
+      return
+    }
+    setSubmitError(null)
+    setSubmittedAt(null)
+  }
+
+  const join = async (name: string) => {
+    setJoining(true)
+    const result = await joinRoom(code, name, readParticipantId(code))
+    setJoining(false)
+
+    if (!result.ok) {
+      // The room can go away between loading the page and typing a name.
+      if (result.code === 'ROOM_NOT_FOUND' || result.code === 'ROOM_EXPIRED') {
+        forgetRoom(code)
+        setStatus(statusFromFailure(result))
+      } else {
+        setJoinError(result.error)
+      }
+      return
+    }
+
+    setJoinError(null)
+    saveMembership(code, {
+      token: result.data.token,
+      participantId: result.data.participantId,
+      displayName: name,
+    })
+  }
+
+  const destroy = async () => {
+    if (ownerSecret === null) return
+    const result = await deleteRoom(code, ownerSecret)
+    if (!result.ok && result.code !== 'ROOM_NOT_FOUND') {
+      setStatus({ kind: 'error', message: result.error })
+      return
+    }
+    forgetRoom(code)
+    setStatus({ kind: 'deleted' })
+  }
+
+  if (status.kind === 'loading' || origin === null) {
+    return (
+      <div
+        className={`${COLUMN} h-64 animate-pulse rounded-2xl bg-zinc-100 dark:bg-zinc-900`}
+      />
+    )
+  }
+
+  if (status.kind === 'deleted') {
     return (
       <Notice
         title="Room deleted"
@@ -81,17 +264,7 @@ export default function RoomView({ code }: { code: string }) {
     )
   }
 
-  // `origin` is null only for the server-rendered pass, during which the store
-  // reports no room. Waiting for it keeps that pass from flashing "no such room".
-  if (origin === null) {
-    return (
-      <div
-        className={`${COLUMN} h-64 animate-pulse rounded-2xl bg-zinc-100 dark:bg-zinc-900`}
-      />
-    )
-  }
-
-  if (room === null) {
+  if (status.kind === 'missing') {
     return (
       <Notice
         title="No such room"
@@ -100,7 +273,7 @@ export default function RoomView({ code }: { code: string }) {
     )
   }
 
-  if (DateTime.fromISO(room.expiresAt) <= DateTime.utc()) {
+  if (status.kind === 'expired') {
     return (
       <Notice
         title="Room expired"
@@ -109,11 +282,21 @@ export default function RoomView({ code }: { code: string }) {
     )
   }
 
+  if (status.kind === 'error') {
+    return (
+      <Notice
+        title="Could not load this room"
+        body={`${status.message} It may be worth trying again in a moment.`}
+      />
+    )
+  }
+
+  const { room } = status
   const roomUrl = `${origin}/r/${room.code}`
-  // A stored mask that no longer fits the grid is treated as no mask at all,
-  // rather than crashing the page it was painted on.
+  // A draft painted against a different grid is treated as no draft at all,
+  // rather than crashing the page it is being drawn on.
   const mask =
-    storedMask !== null && isValidMask(room, storedMask) ? storedMask : emptyMask(room)
+    draftMask !== null && isValidMask(room, draftMask) ? draftMask : emptyMask(room)
 
   return (
     <div className="flex flex-col gap-6">
@@ -161,11 +344,59 @@ export default function RoomView({ code }: { code: string }) {
             room={room}
             code={room.code}
             mask={mask}
-            onChange={(next) => rememberMask(room.code, next)}
+            onChange={(next) => saveDraftMask(room.code, next)}
             size={gridSize}
           />
         )}
       </section>
+
+      {displayName !== null && (
+        <section
+          className={`${COLUMN} rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-medium">
+                {submittedAt === null ? 'Not sent yet' : 'Sent'}
+              </h2>
+              <p className="mt-1 text-xs text-zinc-500">
+                {submittedAt === null
+                  ? 'Only the string of 0s and 1s is sent — never an event name.'
+                  : `Last sent ${new Date(submittedAt).toLocaleString()}. Send again any time to change it.`}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {submittedAt !== null && (
+                <button
+                  type="button"
+                  onClick={() => void withdraw()}
+                  disabled={submitting}
+                  className="rounded-xl bg-zinc-100 px-3 py-2 text-sm font-medium enabled:hover:bg-zinc-200 disabled:opacity-40 dark:bg-zinc-800 dark:enabled:hover:bg-zinc-700"
+                >
+                  Withdraw
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void send(room, mask)}
+                disabled={submitting}
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white enabled:hover:bg-indigo-500 disabled:opacity-40"
+              >
+                {submitting
+                  ? 'Sending…'
+                  : submittedAt === null
+                    ? 'Send my times'
+                    : 'Send again'}
+              </button>
+            </div>
+          </div>
+          {submitError !== null && (
+            <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+              {submitError}
+            </p>
+          )}
+        </section>
+      )}
 
       <section
         className={`${COLUMN} rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800`}
@@ -175,8 +406,8 @@ export default function RoomView({ code }: { code: string }) {
           {displayName === null ? 'Just you.' : `${displayName} — you`}
         </p>
         <p className="mt-1 text-xs text-zinc-400">
-          Other members appear once the room lives on a server rather than in this
-          browser.
+          The room itself is on a server now, so anyone with the link can join it. Who
+          else is here arrives with the results view.
         </p>
       </section>
 
@@ -185,11 +416,8 @@ export default function RoomView({ code }: { code: string }) {
       >
         <h2 className="font-medium text-zinc-700 dark:text-zinc-300">Still to come</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>
-            Submitting to the room. What you mark is kept in this browser for now; when
-            it is submitted, only the string of 0s and 1s is sent.
-          </li>
           <li>The heatmap of everyone&apos;s answers, and the best times to meet.</li>
+          <li>Who else has answered, updating without a reload.</li>
           <li>Connecting Google Calendar, Todoist and TickTick directly.</li>
         </ul>
       </section>
@@ -198,10 +426,7 @@ export default function RoomView({ code }: { code: string }) {
         <div className={COLUMN}>
           <RoomAdminBar
             adminUrl={`${roomUrl}?owner=${ownerSecret}`}
-            onDelete={() => {
-              deleteDemoRoom(room.code)
-              setDeleted(true)
-            }}
+            onDelete={() => void destroy()}
           />
         </div>
       )}
@@ -209,7 +434,9 @@ export default function RoomView({ code }: { code: string }) {
       {displayName === null && (
         <JoinDialog
           roomTitle={room.title}
-          onJoin={(name) => rememberDisplayName(room.code, name)}
+          pending={joining}
+          error={joinError}
+          onJoin={(name) => void join(name)}
         />
       )}
 

@@ -8,18 +8,16 @@ import {
   DEFAULT_DAY_END_MIN,
   DEFAULT_DAY_START_MIN,
   DEFAULT_SLOT_MINUTES,
-  type RoomMeta,
   formatMinuteOfDay,
 } from '@/lib/room'
-import { generateRoomCode } from '@/lib/roomCode'
-import { roomExpiresAt } from '@/lib/slots'
-import { newDemoOwnerSecret, rememberOwnerSecret, saveDemoRoom } from '@/lib/demoRoom'
+import { createRoom } from '@/lib/roomClient'
+import { saveOwnerSecret } from '@/lib/roomSession'
 import CopyButton from './CopyButton'
 import DatePicker from './DatePicker'
 import QrDialog from './QrDialog'
 
 interface Created {
-  room: RoomMeta
+  code: string
   ownerSecret: string
 }
 
@@ -38,6 +36,7 @@ export default function CreateRoomForm() {
   const [dayEndMin, setDayEndMin] = useState(DEFAULT_DAY_END_MIN)
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<Created | null>(null)
+  const [pending, setPending] = useState(false)
   const [showQr, setShowQr] = useState(false)
 
   if (timezone === null || origin === null) {
@@ -57,46 +56,53 @@ export default function CreateRoomForm() {
     )
   }
 
-  const submit = () => {
+  /**
+   * These three checks are repeated verbatim by the server, which is the one
+   * that counts. They run here only so a mistake is named before a round trip
+   * rather than after one.
+   */
+  const localComplaint = (): string | null => {
     const check = validateDates(dates, timezone)
     if (!check.ok) {
-      setError(
-        check.error === 'EMPTY'
-          ? 'Pick at least one day.'
-          : `That set of days is not valid: ${check.detail}`,
-      )
-      return
+      return check.error === 'EMPTY'
+        ? 'Pick at least one day.'
+        : `That set of days is not valid: ${check.detail}`
     }
-    if (dayEndMin <= dayStartMin) {
-      setError('The end of the day has to come after the start.')
-      return
-    }
+    if (dayEndMin <= dayStartMin)
+      return 'The end of the day has to come after the start.'
     if ((dayEndMin - dayStartMin) % DEFAULT_SLOT_MINUTES !== 0) {
-      setError('The day has to divide evenly into slots.')
+      return 'The day has to divide evenly into slots.'
+    }
+    return null
+  }
+
+  const submit = async () => {
+    const complaint = localComplaint()
+    if (complaint !== null) {
+      setError(complaint)
       return
     }
 
-    const grid = {
+    setPending(true)
+    const result = await createRoom({
+      title: title.trim() === '' ? null : title.trim(),
       timezone,
       dates,
       dayStartMin,
       dayEndMin,
-      slotMinutes: DEFAULT_SLOT_MINUTES,
-    }
-    const room: RoomMeta = {
-      code: generateRoomCode(),
-      title: title.trim() === '' ? null : title.trim(),
-      ...grid,
-      // Derived here only because there is no server yet; `POST /api/rooms`
-      // owns this value once it exists.
-      expiresAt: roomExpiresAt(grid).toISO() ?? '',
+    })
+    setPending(false)
+
+    if (!result.ok) {
+      setError(result.error)
+      return
     }
 
-    const ownerSecret = newDemoOwnerSecret()
-    saveDemoRoom(room)
-    rememberOwnerSecret(room.code, ownerSecret)
+    // Stored before the success screen renders, so the creator is recognised as
+    // the owner even if they close the tab without copying the admin link.
+    saveOwnerSecret(result.data.code, result.data.ownerSecret)
     setError(null)
-    setCreated({ room, ownerSecret })
+    setCreated({ code: result.data.code, ownerSecret: result.data.ownerSecret })
   }
 
   return (
@@ -154,10 +160,10 @@ export default function CreateRoomForm() {
 
       <button
         type="submit"
-        disabled={dates.length === 0}
+        disabled={dates.length === 0 || pending}
         className="rounded-xl bg-indigo-600 px-4 py-3 font-medium text-white enabled:hover:bg-indigo-500 disabled:opacity-40"
       >
-        Create room
+        {pending ? 'Creating…' : 'Create room'}
       </button>
     </form>
   )
@@ -200,17 +206,15 @@ function RoomCreated({
   showQr: boolean
   onToggleQr: (open: boolean) => void
 }) {
-  const { room, ownerSecret } = created
-  const roomUrl = `${origin}/r/${room.code}`
+  const { code, ownerSecret } = created
+  const roomUrl = `${origin}/r/${code}`
   const adminUrl = `${roomUrl}?owner=${ownerSecret}`
 
   return (
     <div className="flex flex-col gap-6">
       <div className="rounded-2xl border border-zinc-200 p-6 text-center dark:border-zinc-800">
         <p className="text-sm text-zinc-500">Room code</p>
-        <p className="mt-1 font-mono text-4xl font-semibold tracking-[0.2em]">
-          {room.code}
-        </p>
+        <p className="mt-1 font-mono text-4xl font-semibold tracking-[0.2em]">{code}</p>
         <div className="mt-4 flex justify-center gap-2">
           <CopyButton value={roomUrl} label="Copy link" />
           <button
@@ -240,7 +244,7 @@ function RoomCreated({
       </div>
 
       <Link
-        href={`/r/${room.code}`}
+        href={`/r/${code}`}
         className="rounded-xl bg-indigo-600 px-4 py-3 text-center font-medium text-white hover:bg-indigo-500"
       >
         Go to the room
