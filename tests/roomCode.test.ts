@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
@@ -79,5 +79,24 @@ describe('isValidRoomCode', () => {
   it('rejects lowercase and excluded characters', () => {
     expect(isValidRoomCode('x7b92m')).toBe(false)
     expect(isValidRoomCode('X7B92I')).toBe(false)
+  })
+})
+
+describe('generateRoomCode, byte by byte', () => {
+  it('redraws bytes that would fold unevenly onto the alphabet', () => {
+    // 256 is not a multiple of 30, so bytes 240-255 must be discarded rather
+    // than folded with %, which would favour the first 16 characters. The bias
+    // is far too small for the distribution test above to see, so pin the draw.
+    const queue = [250, 251, 252, 253, 254, 255, 0, 1, 2, 3, 4, 5]
+    const spy = vi
+      .spyOn(globalThis.crypto, 'getRandomValues')
+      .mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
+        const bytes = array as unknown as Uint8Array
+        for (let i = 0; i < bytes.length; i++) bytes[i] = queue.shift() ?? 0
+        return array
+      })
+
+    expect(generateRoomCode()).toBe(ROOM_CODE_ALPHABET.slice(0, ROOM_CODE_LENGTH))
+    spy.mockRestore()
   })
 })

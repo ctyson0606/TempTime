@@ -26,8 +26,7 @@ export type DateRejection =
   | 'AFTER_WINDOW'
 
 export type DateCheck =
-  | { ok: true }
-  | { ok: false; error: DateRejection; detail: string }
+  { ok: true } | { ok: false; error: DateRejection; detail: string }
 
 function reject(error: DateRejection, detail: string): DateCheck {
   return { ok: false, error, detail }

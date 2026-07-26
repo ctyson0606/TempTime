@@ -5,12 +5,14 @@ import {
   blocksToMask,
   emptyMask,
   isValidMask,
+  roomExpiresAt,
   slotDate,
   slotRange,
   slotStart,
   slotsPerDay,
   timeToSlot,
   totalSlots,
+  unionMasks,
 } from '../lib/slots'
 
 /** Two consecutive days plus one three weeks later — the gap is the point. */
@@ -157,9 +159,7 @@ describe('blocksToMask', () => {
   })
 
   it('marks only the ends of an interval spanning unselected days', () => {
-    const mask = blocksToMask(room, [
-      block('2026-07-27T22:00', '2026-08-15T09:00'),
-    ])
+    const mask = blocksToMask(room, [block('2026-07-27T22:00', '2026-08-15T09:00')])
     // 22:00-24:00 on day 1, then 08:00-09:00 on day 2. Nothing in between,
     // because nothing in between is on the grid.
     expect(busyIndices(mask)).toEqual([60, 61, 62, 63, 64, 65])
@@ -194,5 +194,51 @@ describe('isValidMask', () => {
     expect(isValidMask(room, emptyMask(room))).toBe(true)
     expect(isValidMask(room, '0'.repeat(95))).toBe(false)
     expect(isValidMask(room, '2'.repeat(96))).toBe(false)
+  })
+})
+
+describe('roomExpiresAt', () => {
+  it('is the end of the last day plus the grace period', () => {
+    // Last date is 2026-08-15, dayEndMin 1440 = midnight starting 08-16, +24h.
+    expect(roomExpiresAt(room).toISO()).toBe(wall('2026-08-17T00:00').toISO())
+  })
+
+  it('follows the last selected date, not the first', () => {
+    const short: RoomGrid = { ...room, dates: ['2026-07-26'] }
+    expect(roomExpiresAt(short).toISO()).toBe(wall('2026-07-28T00:00').toISO())
+  })
+
+  it('respects a day that ends before midnight', () => {
+    const evening: RoomGrid = { ...room, dayEndMin: 1320 }
+    expect(roomExpiresAt(evening).toISO()).toBe(wall('2026-08-16T22:00').toISO())
+  })
+
+  it('is anchored in the room timezone, not the runtime one', () => {
+    const utc: RoomGrid = { ...room, timezone: 'UTC' }
+    expect(roomExpiresAt(utc).toUTC().toISO()).toBe(
+      DateTime.fromISO('2026-08-17T00:00', { zone: 'UTC' }).toISO(),
+    )
+    expect(roomExpiresAt(room).toUTC().toISO()).toBe(
+      DateTime.fromISO('2026-08-16T16:00', { zone: 'UTC' }).toISO(),
+    )
+  })
+
+  it('refuses a room with no dates', () => {
+    expect(() => roomExpiresAt({ ...room, dates: [] })).toThrow(RangeError)
+  })
+})
+
+describe('unionMasks', () => {
+  it('is busy where either side is busy', () => {
+    expect(unionMasks('0011', '0101')).toBe('0111')
+  })
+
+  it('leaves a mask alone when merged with an empty one', () => {
+    const mask = '1'.repeat(96)
+    expect(unionMasks(mask, emptyMask(room))).toBe(mask)
+  })
+
+  it('refuses masks of different lengths', () => {
+    expect(() => unionMasks('000', '0000')).toThrow(RangeError)
   })
 })

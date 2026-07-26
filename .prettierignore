@@ -1,0 +1,14 @@
+# Build output and dependencies
+.next/
+out/
+build/
+node_modules/
+coverage/
+next-env.d.ts
+
+# Lockfiles are machine-written
+package-lock.json
+
+# Markdown is hand-wrapped. METHOD.md and STATE.md are read as prose, and
+# reflowing them turns a memory update into an unreviewable diff.
+*.md

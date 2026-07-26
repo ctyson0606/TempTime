@@ -100,6 +100,25 @@ export function allSlotRanges(
   return ranges
 }
 
+/** Hours a room outlives its last slot before it is destroyed. */
+export const EXPIRY_GRACE_HOURS = 24
+
+/**
+ * When the room is destroyed: the end of its last day, plus a grace period.
+ *
+ * The grace exists because deleting at the instant the last slot ends would
+ * blank the page of anyone still looking at the result that evening. Note this
+ * is derived from the dates chosen, not from creation time — two rooms created
+ * together can expire three months apart.
+ */
+export function roomExpiresAt(room: RoomGrid): DateTime {
+  if (room.dates.length === 0) {
+    throw new RangeError('a room with no dates has no expiry')
+  }
+  const last = room.dates[room.dates.length - 1]
+  return wallTime(room, last, room.dayEndMin).plus({ hours: EXPIRY_GRACE_HOURS })
+}
+
 /**
  * Instant to slot index, or `null` when it falls outside the grid.
  *
@@ -139,10 +158,7 @@ export function timeToSlot(room: RoomGrid, at: DateTime): number | null {
  * indices. At 224 slots the cost is irrelevant, and it removes the class of bug
  * where edge-mapping quietly mishandles a gap in `dates`.
  */
-export function blocksToMask(
-  room: RoomGrid,
-  blocks: readonly TimeInterval[],
-): string {
+export function blocksToMask(room: RoomGrid, blocks: readonly TimeInterval[]): string {
   const total = totalSlots(room)
   const mask = new Array<string>(total).fill('0')
   const ranges = allSlotRanges(room).map((r) => ({
@@ -171,4 +187,21 @@ export function emptyMask(room: RoomGrid): string {
 
 export function isValidMask(room: RoomGrid, mask: string): boolean {
   return mask.length === totalSlots(room) && /^[01]*$/.test(mask)
+}
+
+/**
+ * Busy in either mask is busy in the result.
+ *
+ * Sources add to each other rather than replace: importing a calendar after
+ * painting by hand keeps both, which is what someone who did both meant.
+ */
+export function unionMasks(a: string, b: string): string {
+  if (a.length !== b.length) {
+    throw new RangeError(`cannot union masks of ${a.length} and ${b.length} slots`)
+  }
+  let merged = ''
+  for (let i = 0; i < a.length; i++) {
+    merged += a[i] === '1' || b[i] === '1' ? '1' : '0'
+  }
+  return merged
 }
