@@ -108,8 +108,12 @@ try {
 
   // --- painting, sending, and getting it back ------------------------------
   await b.getByRole('button', { name: 'Paint by hand' }).click()
-  const from = await b.locator('[data-slot="4"]').boundingBox()
-  const to = await b.locator('[data-slot="8"]').boundingBox()
+  // Scoped to the painter: the page draws a second grid for the heatmap, and
+  // both fill their cells with data-slot. An unscoped [data-slot="4"] matches
+  // two elements and Playwright refuses to guess which.
+  const painter = b.getByRole('group', { name: 'Your busy times' })
+  const from = await painter.locator('[data-slot="4"]').boundingBox()
+  const to = await painter.locator('[data-slot="8"]').boundingBox()
   await b.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
   await b.mouse.down()
   await b.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 })
@@ -118,7 +122,7 @@ try {
   // Busy cells carry the painter's fill class; they are plain divs with no
   // pressed state, so counting the class is the only thing that reflects them.
   const busyCells = () =>
-    b
+    painter
       .locator('[data-slot]')
       .evaluateAll(
         (cells) => cells.filter((c) => c.className.includes('bg-indigo-500')).length,

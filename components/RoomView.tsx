@@ -5,8 +5,10 @@ import Link from 'next/link'
 import { useBrowserValue } from '@/lib/browser'
 import { formatMinuteOfDay } from '@/lib/room'
 import {
+  type Heatmap as HeatmapData,
   type RoomDetail,
   deleteRoom,
+  fetchHeatmap,
   fetchMySubmission,
   fetchRoom,
   joinRoom,
@@ -25,12 +27,16 @@ import {
   saveOwnerSecret,
   subscribeSession,
 } from '@/lib/roomSession'
+import { type RealtimeMode, watchRoom } from '@/lib/realtime'
 import { loadImport } from '@/lib/importCache'
 import { type RoomGrid, blocksToMask, emptyMask, isValidMask } from '@/lib/slots'
+import BestSlots from './BestSlots'
 import BusyInput from './BusyInput'
 import CopyButton from './CopyButton'
 import ExpiryBadge from './ExpiryBadge'
+import Heatmap from './Heatmap'
 import JoinDialog from './JoinDialog'
+import MemberList from './MemberList'
 import QrDialog from './QrDialog'
 import RoomAdminBar from './RoomAdminBar'
 import SlotGrid, { GRID_CARD_WIDTH, GRID_SIZES, type GridSize } from './SlotGrid'
@@ -109,6 +115,8 @@ export default function RoomView({ code }: { code: string }) {
   const [submittedAt, setSubmittedAt] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [heatmap, setHeatmap] = useState<HeatmapData | null>(null)
+  const [liveMode, setLiveMode] = useState<RealtimeMode>('connecting')
 
   const token = useSyncExternalStore(
     subscribeSession,
@@ -128,6 +136,11 @@ export default function RoomView({ code }: { code: string }) {
   const draftMask = useSyncExternalStore(
     subscribeSession,
     () => readDraftMask(code),
+    () => null,
+  )
+  const participantId = useSyncExternalStore(
+    subscribeSession,
+    () => readParticipantId(code),
     () => null,
   )
 
@@ -184,6 +197,64 @@ export default function RoomView({ code }: { code: string }) {
     }
   }, [code, token])
 
+  useEffect(() => {
+    if (token === null) return
+    let cancelled = false
+
+    fetchHeatmap(code, token).then((result) => {
+      if (cancelled || !result.ok) return
+      setHeatmap(result.data)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [code, token])
+
+  // Realtime needs the room's id, which only exists once the room has loaded.
+  const roomId = status.kind === 'ready' ? status.room.id : null
+
+  useEffect(() => {
+    if (token === null || roomId === null) return
+    let cancelled = false
+
+    const stop = watchRoom({
+      roomId,
+      token,
+      onMode: (next) => {
+        if (!cancelled) setLiveMode(next)
+      },
+      // Deliberately re-reads everything rather than applying the pushed row.
+      // What arrives is "somebody did something"; the answers themselves have
+      // one route into this browser and it is the heatmap endpoint.
+      onChange: () => {
+        fetchHeatmap(code, token).then((result) => {
+          if (cancelled || !result.ok) return
+          setHeatmap(result.data)
+        })
+      },
+    })
+
+    return () => {
+      cancelled = true
+      stop()
+    }
+  }, [code, roomId, token])
+
+  /**
+   * Read the overlay again after this browser changes its own answer.
+   *
+   * Someone else's answer does not arrive on its own yet — that is what
+   * `lib/realtime.ts` is for — so until then the results are current as of the
+   * last thing *you* did. A failure leaves the previous overlay on screen rather
+   * than blanking it: being one refresh behind is not worth an error banner.
+   */
+  const refreshHeatmap = async () => {
+    if (token === null) return
+    const result = await fetchHeatmap(code, token)
+    if (result.ok) setHeatmap(result.data)
+  }
+
   const send = async (room: RoomDetail, mask: string) => {
     if (token === null) return
     setSubmitting(true)
@@ -196,6 +267,7 @@ export default function RoomView({ code }: { code: string }) {
     }
     setSubmitError(null)
     setSubmittedAt(result.data.updatedAt)
+    void refreshHeatmap()
   }
 
   const withdraw = async () => {
@@ -210,6 +282,7 @@ export default function RoomView({ code }: { code: string }) {
     }
     setSubmitError(null)
     setSubmittedAt(null)
+    void refreshHeatmap()
   }
 
   const join = async (name: string) => {
@@ -398,17 +471,47 @@ export default function RoomView({ code }: { code: string }) {
         </section>
       )}
 
+      {heatmap !== null && (
+        <>
+          <section
+            className={`${GRID_CARD_WIDTH} rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800`}
+          >
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-sm font-medium">When everyone is free</h2>
+              <LiveBadge mode={liveMode} />
+            </div>
+            <Heatmap
+              room={room}
+              freeCounts={heatmap.freeCounts}
+              submittedCount={heatmap.submittedCount}
+              size={gridSize}
+            />
+          </section>
+
+          <section
+            className={`${COLUMN} rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800`}
+          >
+            <h2 className="mb-3 text-sm font-medium">Best times to meet</h2>
+            <BestSlots
+              room={room}
+              slots={heatmap.bestSlots}
+              submittedCount={heatmap.submittedCount}
+            />
+          </section>
+        </>
+      )}
+
       <section
         className={`${COLUMN} rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800`}
       >
         <h2 className="text-sm font-medium">In this room</h2>
-        <p className="mt-2 text-sm text-zinc-500">
-          {displayName === null ? 'Just you.' : `${displayName} — you`}
-        </p>
-        <p className="mt-1 text-xs text-zinc-400">
-          The room itself is on a server now, so anyone with the link can join it. Who
-          else is here arrives with the results view.
-        </p>
+        {heatmap === null ? (
+          <p className="mt-2 text-sm text-zinc-500">
+            {displayName === null ? 'Just you.' : `${displayName} — you`}
+          </p>
+        ) : (
+          <MemberList members={heatmap.participants} youId={participantId} />
+        )}
       </section>
 
       <section
@@ -416,8 +519,10 @@ export default function RoomView({ code }: { code: string }) {
       >
         <h2 className="font-medium text-zinc-700 dark:text-zinc-300">Still to come</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>The heatmap of everyone&apos;s answers, and the best times to meet.</li>
-          <li>Who else has answered, updating without a reload.</li>
+          <li>
+            Answers from other people arriving without a reload — for now the results
+            update when you send or withdraw.
+          </li>
           <li>Connecting Google Calendar, Todoist and TickTick directly.</li>
         </ul>
       </section>
@@ -479,6 +584,38 @@ function GridSizePicker({
         </button>
       ))}
     </div>
+  )
+}
+
+/**
+ * Which transport the results are arriving on.
+ *
+ * Worth saying out loud rather than hiding: on the fallback an answer can be
+ * four seconds stale, and someone staring at a room waiting for a friend should
+ * be able to tell "nothing has happened" from "this page is a bit behind".
+ */
+function LiveBadge({ mode }: { mode: RealtimeMode }) {
+  const label = {
+    connecting: 'Connecting…',
+    live: 'Updating live',
+    polling: 'Checking every few seconds',
+  }[mode]
+
+  return (
+    <span className="flex items-center gap-1.5 text-xs text-zinc-500">
+      <span
+        aria-hidden
+        className={[
+          'h-1.5 w-1.5 rounded-full',
+          mode === 'live'
+            ? 'bg-emerald-500'
+            : mode === 'polling'
+              ? 'bg-amber-500'
+              : 'bg-zinc-300 dark:bg-zinc-600',
+        ].join(' ')}
+      />
+      {label}
+    </span>
   )
 }
 

@@ -14,11 +14,17 @@ export const JWT_ALGORITHM = 'HS256'
  * audience and a matching `role` claim, and the same token is handed to the
  * Supabase client for Realtime (PLAN.md section 2.3).
  *
- * Verified against a live project on 2026-07-26: PostgREST accepts a token
- * carrying exactly these claims and rejects one signed with a different secret.
+ * Verified against a live project on 2026-07-26, for both services that see it.
+ * PostgREST accepts a token carrying exactly these claims and rejects one signed
+ * with a different secret. Realtime validates separately and also accepts it: a
+ * browser subscribes to `participants` and receives this room's changes under
+ * the RLS policy in `0002_rls.sql`.
  *
- * UNVERIFIED for Realtime, which validates separately from PostgREST. If
- * Realtime rejects a token PostgREST accepts, this is the first place to look.
+ * Note what "Realtime accepts it" does not mean. A channel reports SUBSCRIBED
+ * on the strength of the join alone; whether events are then delivered depends
+ * on the RLS policy the socket's token resolves to. A subscription that connects
+ * and stays silent is the shape that failure takes, so SUBSCRIBED is not on its
+ * own evidence that any of this is right — delivery is.
  */
 export const JWT_AUDIENCE = 'authenticated'
 

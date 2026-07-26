@@ -24,12 +24,23 @@ const HOUR = 60 * MINUTE
  * Reading a room is limited too. It is the one endpoint needed to enumerate
  * room codes, so leaving it open would make the sixth character pointless.
  */
+/**
+ * The heatmap gets its own, looser bucket rather than sharing `readRoom`.
+ *
+ * Two reasons. It cannot be used to enumerate room codes — it needs a Bearer
+ * token already bound to the room — so the limit that makes the sixth character
+ * worth having does not apply to it. And it is the endpoint the realtime
+ * fallback polls every four seconds (PLAN.md section 5), which is 15 calls a
+ * minute per open tab; on `readRoom`'s allowance four members behind one office
+ * NAT would rate-limit each other just by watching the page.
+ */
 export const RATE_LIMITS = {
   createRoom: { limit: 10, windowMs: HOUR },
   readRoom: { limit: 60, windowMs: MINUTE },
   join: { limit: 20, windowMs: MINUTE },
   submit: { limit: 30, windowMs: MINUTE },
   deleteRoom: { limit: 10, windowMs: MINUTE },
+  heatmap: { limit: 120, windowMs: MINUTE },
 } as const satisfies Record<string, RateLimitRule>
 
 export type RateLimitName = keyof typeof RATE_LIMITS

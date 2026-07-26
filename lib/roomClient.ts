@@ -152,6 +152,41 @@ export function fetchMySubmission(
   })
 }
 
+export interface HeatmapMember {
+  id: string
+  displayName: string
+  submitted: boolean
+}
+
+export interface HeatmapBestSlot {
+  startSlot: number
+  /** Exclusive, matching `lib/aggregate.ts`. */
+  endSlot: number
+  freeCount: number
+  /** False means this is the best available, not everyone. */
+  isEveryone: boolean
+}
+
+export interface Heatmap {
+  participants: HeatmapMember[]
+  submittedCount: number
+  /** Length `totalSlots`. How many submitters are free in each slot. */
+  freeCounts: number[]
+  bestSlots: HeatmapBestSlot[]
+  mySubmitted: boolean
+}
+
+/**
+ * The overlay. Note what is absent: no `busyMask` anywhere in the response, so
+ * there is nothing here to accidentally render per person even if a component
+ * wanted to.
+ */
+export function fetchHeatmap(code: string, token: string): Promise<ApiResult<Heatmap>> {
+  return request<Heatmap>(`/api/rooms/${encodeURIComponent(code)}/heatmap`, {
+    headers: bearer(token),
+  })
+}
+
 export function deleteRoom(
   code: string,
   ownerSecret: string,

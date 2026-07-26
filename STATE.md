@@ -1,6 +1,6 @@
 # STATE
 
-> Last updated: 2026-07-26
+> Last updated: 2026-07-26 (realtime)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -10,17 +10,15 @@ archived — git holds the history. For durable rules and workflow, see
 
 ## Current Focus
 
-Everything one member does now runs against the server. Create a room, send the
-link, join it from another browser, paint or import your busy time, untick what
-is private, send it, change your mind, withdraw. The stand-in is gone; two
-browsers really do share a room, and it has been driven end to end rather than
-reasoned about.
+**M3 is closed.** A room shows the overlay of everyone's answers, the ranked
+windows to meet, and who has answered — and somebody else's answer now arrives on
+its own, over a Realtime subscription, with a polling fallback that has been
+verified separately by cutting the socket. All of it was driven in two browser
+contexts, not merely compiled.
 
-What is missing is the other half of the product: **seeing anyone else.** Masks
-are stored but nothing reads them back in aggregate, so a room with four members
-still shows each of them only their own answer. `GET /heatmap` and the three
-components that draw it are the next thing, and they are the last piece before
-the app does what it exists to do.
+What is left is **M4**: the purge route, the CSP header, and the rest of
+`PLAN.md` §11's last list. Nothing about it is blocked, and none of it needs a
+decision that has not been taken.
 
 ---
 
@@ -47,15 +45,33 @@ the app does what it exists to do.
   `lib/api.ts`, `lib/supabase/server.ts`.
 - Routes: `POST /api/rooms`, `GET` and `DELETE /api/rooms/:code`,
   `POST /api/rooms/:code/join`, `POST` and `DELETE /api/rooms/:code/submit`,
-  `GET /api/rooms/:code/my-submission`.
-- Two scripts that verify against the running system, both development-only
+  `GET /api/rooms/:code/my-submission`, `GET /api/rooms/:code/heatmap`.
+- `fetchHeatmap` in `lib/roomClient.ts` and the results UI it feeds: `Heatmap`
+  (five-step colour scale, hover readout, empty state), `BestSlots` and
+  `MemberList`, all wired into `RoomView`.
+- `lib/realtime.ts`: subscribes to `participants` for the room and refetches
+  `/heatmap` on any change, falling back to polling every four seconds if the
+  channel does not reach `SUBSCRIBED` within five. The pushed payload is
+  discarded — answers keep their single route into a browser. `RoomView` shows
+  which transport is live, and that badge is what proves the socket delivered
+  anything, since `SUBSCRIBED` clears the poll timer and the two cannot overlap.
+- `formatSlotWindow` in `lib/room.ts`, shared by the two components that print a
+  time range so they cannot disagree about what the end of a day is called.
+- Four scripts that verify against the running system, all development-only
   because they write to the live database: `scripts/verify-rls.mjs` (the
-  repeatable proof of `PLAN.md` §2.2) and `scripts/drive-ui.mjs` (the M1
-  acceptance test in two browser contexts).
-- 196 tests, with `format:check`, `lint`, `typecheck` and `next build` clean.
-  The count fell from 205 because the stand-in's tests went with it.
+  repeatable proof of `PLAN.md` §2.2), `scripts/drive-ui.mjs` (the M1
+  acceptance test in two browser contexts), `scripts/verify-heatmap.mjs`
+  (19 assertions over the overlay API, its privacy and its authorisation) and
+  `scripts/drive-heatmap.mjs` (the M3 acceptance test, 28 assertions in two
+  contexts, covering both the socket and the fallback). The last three need the
+  dev server — `APP_URL=` for the API probe,
+  `BASE_URL=` for the browser ones — and each creates rooms against a limit of
+  ten an hour, so a handful of runs an hour is the ceiling for all of them
+  together.
+- 203 tests, with `format:check`, `lint` and `typecheck` clean.
 - Milestone coverage: `PLAN.md` §11 holds the per-item state; do not duplicate it
-  here. M1 and M2 are complete, acceptance tests included.
+  here. M1, M2 and M3 are complete, acceptance tests included. M4 has not been
+  started.
 
 **In Progress**
 - Nothing. The last task closed cleanly.
@@ -67,39 +83,39 @@ the app does what it exists to do.
 
 ## Next Steps
 
-1. `GET /api/rooms/:code/heatmap` — `aggregate` and `findBestSlots` already
-   exist and are tested; the route reads every mask with the secret key and
-   returns counts, never an individual mask.
-2. `Heatmap`, `BestSlots` and `MemberList`. The grid already draws a gap between
-   non-adjacent days, so the heatmap inherits it.
-3. Settle the drag gesture before the heatmap is built on top of it — see the
-   open question below.
-4. `lib/realtime.ts` last: it degrades to polling, and polling needs nothing new.
+1. M4, from `PLAN.md` §11: `POST /api/cron/purge` behind `x-cron-secret`, the CSP
+   header, and the remaining hardening. The `pg_cron` schedule already does the
+   purging, so the route is the backup path rather than the primary one.
+2. Deploying, which is what turns three deferred things into answerable ones: the
+   two-browser test with a real friend (`PLAN.md` §12), the coarser cron cadence
+   on a free tier, and the live-update latency target.
 
 ---
 
 ## Open Questions
 
-- **Will Realtime accept our room tokens?** Half answered. PostgREST verifiably
-  accepts a token signed by `POST /join` — it returns that room's members and
-  refuses `submissions` with a 403 — so the secret, the algorithm, and the `role`
-  and `aud` claims in `lib/jwt.ts` are all right for *that* service. Realtime
-  validates separately and has not been tried, which is why the `UNVERIFIED` note
-  in `lib/jwt.ts` was narrowed rather than deleted. Unanswerable until something
-  subscribes.
+- **Why did the first ever subscription deliver nothing?** Unexplained, and the
+  only genuinely open item here. The channel reported `SUBSCRIBED` and no event
+  ever arrived; a plausible cause was found, fixed, and then disproved by putting
+  it back and watching three runs pass anyway. It has not recurred in a dozen runs
+  since. A cold Realtime service fits the evidence better than anything else
+  proposed. Worth remembering rather than chasing: if it returns, this is the
+  paragraph that says it has happened before, and the polling fallback is what
+  keeps the room working while it is diagnosed.
 - **Where does the app itself run?** Deferrable; development runs locally. Two
   constraints are known. A public URL is a precondition for the two-browser test
   in `PLAN.md` §12 — a friend cannot reach `localhost`. And Vercel's free tier
   runs scheduled jobs once a day, not hourly, so the `api/cron/purge` backup is
   coarser there than `PLAN.md` §4.3 assumes; the `pg_cron` schedule is the
   primary path and is unaffected. Whatever is chosen should sit in Tokyo, to
-  match the database.
-- **Is a dragged block the right gesture?** Dragging marks a rectangle of
-  day × time-of-day, so "Saturday 09:00 to Monday 10:00" means those three
-  mornings. The alternative is painting whichever cells the pointer passes over,
-  as When2meet does. The user has not compared them on a real screen yet; the
-  choice is one pure function, `blockSlots`. Cheapest to settle before the
-  heatmap is wired on top of it.
+  match the database — and that is also what makes the live-update target
+  measurable, since one of the two round trips an update costs is the
+  app-to-database hop.
+- **How should the scale read with very few submitters?** With two people the
+  levels in use are the third and the fifth, so "one of two is free" already looks
+  fairly strong. It is legible and nobody has complained; whether it should
+  stretch to the ends of the scale instead is a judgement to make while looking at
+  a real room with three or four people in it.
 
 ---
 
@@ -122,6 +138,59 @@ the app does what it exists to do.
 
 ## Recent Decisions
 
+- **2026-07-26 — The two-second live-update target is measured, not asserted.**
+  `PLAN.md` §11 M3 now asserts the *transport* — the update arrives with no
+  reload while the page still reads "Updating live" — and prints the latency
+  beside the target. An update costs two sequential Tokyo round trips, one of
+  which is the app-to-database hop that deploying beside the database removes;
+  locally it lands between 1.4 and 3.0 seconds. The user chose this over keeping
+  a hard assertion that would fail about a third of the time for reasons outside
+  the code. See METHOD.md → Verification.
+- **2026-07-26 — `lib/realtime.ts` attaches the token with an explicit `setAuth`
+  before joining, though this is not proven necessary.** supabase-js does reach
+  `setAuth` from the `accessToken` option, but in a promise it does not await.
+  Reverting to the bare `subscribe()` did not reproduce any failure. Kept because
+  the cost is one `await` and the alternative is depending on the timing of a
+  promise the library chose not to await; the comment in the file says exactly
+  this rather than claiming a fix.
+- **2026-07-26 — The transport is shown in the UI, not hidden.** `LiveBadge`
+  reads "Updating live" or "Checking every few seconds". On the fallback an
+  answer can be four seconds stale, and someone waiting on a friend deserves to
+  tell "nothing has happened" from "this page is behind". It doubles as the only
+  honest way to prove which path delivered an update.
+- **2026-07-26 — Nobody-is-free is drawn as the grid's plain empty cell, not a
+  colour of its own.** The eye is hunting for where the green is, and giving the
+  impossible times their own shade only competes with that. The hover readout
+  still names them explicitly, so the information is not lost, only unhighlighted.
+- **2026-07-26 — Both grids carry an accessible name, added when the second one
+  appeared.** `SlotGrid` grew a `label` prop rendering `role="group"` with
+  `aria-label`; the painter is "Your busy times", the overlay is "Everyone's free
+  time". Without it `[data-slot="4"]` matched two elements and `drive-ui.mjs`
+  broke — the general rule is in METHOD.md → Conventions.
+- **2026-07-26 — `scripts/drive-heatmap.mjs` is kept, and creates its room
+  through the API rather than the date picker.** Driving the picker is
+  `drive-ui.mjs`'s job; repeating it here only adds ways for this script to fail
+  at something it is not testing.
+- **2026-07-26 — The drag stays a rectangle of day × time-of-day.** Compared
+  against painting whichever cells the pointer passes over, as When2meet does,
+  and the user judged the current gesture good enough on a real screen. `blockSlots`
+  is unchanged and the heatmap can now be built on top of it.
+- **2026-07-26 — No minimum-submitter threshold on the heatmap.** With one
+  submitter the counts are that person's mask inverted, and showing it anyway was
+  the explicit choice: hiding the overlay until a second person answers would
+  blank the page for whoever is testing their own room, which is the common case
+  early in a room's life. Accepted knowingly — see METHOD.md → Conventions on
+  what an aggregate of one actually is.
+- **2026-07-26 — `/heatmap` gets its own rate-limit bucket at 120 a minute.** It
+  cannot enumerate room codes, since it needs a token this room issued, so the
+  60-a-minute limit that makes the sixth code character worth having does not
+  apply to it. What does apply is the polling fallback at one call every four
+  seconds per open tab. `PLAN.md` §7.2 carries the table row and a test in
+  `tests/rateLimit.test.ts` encodes the reason.
+- **2026-07-26 — `scripts/verify-heatmap.mjs` is kept, like the other two.** It
+  is the executable form of `PLAN.md` §12's privacy step for the aggregate, and
+  the only thing that exercises authorisation against a token valid elsewhere.
+  Re-run it after touching the route, `lib/aggregate.ts` or `roomMember`.
 - **2026-07-26 — Supabase, decided by the goal rather than the technology.** The
   question that settled it was whether the point right now is to run the flow
   alone or to send a friend a link; the answer was the link, which rules out a

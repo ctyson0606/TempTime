@@ -12,6 +12,30 @@ export const GRID_SIZES: readonly GridSize[] = ['small', 'medium', 'large']
 export const SLOT_ATTRIBUTE = 'data-slot'
 
 /**
+ * Slot under a pointer, or null when it is not over a cell.
+ *
+ * Lives here rather than with either caller because it reads the attribute this
+ * file writes: the two have to agree, and a copy in each consumer is a copy that
+ * can stop agreeing.
+ */
+export function slotAt(target: EventTarget | null): number | null {
+  if (!(target instanceof Element)) return null
+  const raw = target.closest(`[${SLOT_ATTRIBUTE}]`)?.getAttribute(SLOT_ATTRIBUTE)
+  if (raw === null || raw === undefined) return null
+  const slot = Number(raw)
+  return Number.isInteger(slot) ? slot : null
+}
+
+/**
+ * During a touch drag the browser keeps sending events to the element the touch
+ * started on, so which cell the finger is over now has to be resolved by
+ * position rather than read off the event's target.
+ */
+export function slotAtPoint(x: number, y: number): number | null {
+  return slotAt(document.elementFromPoint(x, y))
+}
+
+/**
  * Class strings are written out per size rather than interpolated, because
  * Tailwind only emits the classes it can see in the source.
  *
@@ -80,6 +104,12 @@ const EMPTY_CELL = 'bg-zinc-100 dark:bg-zinc-800/60'
 interface SlotGridProps {
   room: RoomGrid
   size?: GridSize
+  /**
+   * Names the grid. A room page draws two of these — the one you paint and the
+   * one showing everybody — and without a name they are indistinguishable to a
+   * screen reader, and to anything else selecting by role.
+   */
+  label?: string
   /** Look of the cell at `slot`. Return nothing for the plain empty cell. */
   cellClass?: (slot: number) => string | undefined
   /**
@@ -103,6 +133,7 @@ interface SlotGridProps {
 export default function SlotGrid({
   room,
   size = 'medium',
+  label,
   cellClass,
   onPointerDown,
   onPointerMove,
@@ -131,7 +162,11 @@ export default function SlotGrid({
   })
 
   return (
-    <div className="overflow-x-auto">
+    <div
+      className="overflow-x-auto"
+      role={label === undefined ? undefined : 'group'}
+      aria-label={label}
+    >
       <div className="mx-auto flex w-fit min-w-max">
         <div className={`${style.gutter} shrink-0`}>
           <div className={style.header} />

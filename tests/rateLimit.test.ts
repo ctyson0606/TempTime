@@ -75,6 +75,18 @@ describe('checkRateLimit', () => {
     }
     expect(checkRateLimit('readRoom', '1.2.3.4', T0).ok).toBe(false)
   })
+
+  /**
+   * Not a property of the algorithm but of the number chosen, and the number is
+   * the whole point: the realtime fallback polls the heatmap every 4 seconds, so
+   * a limit set below that rate refuses members for merely reading the page. Four
+   * people behind one office NAT is the case that has to fit.
+   */
+  it('leaves room for four tabs polling the heatmap every four seconds', () => {
+    const { limit, windowMs } = RATE_LIMITS.heatmap
+    const pollsPerTabPerWindow = windowMs / 4_000
+    expect(limit).toBeGreaterThanOrEqual(pollsPerTabPerWindow * 4)
+  })
 })
 
 describe('clientIp', () => {

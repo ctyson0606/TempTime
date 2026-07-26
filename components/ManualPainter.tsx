@@ -10,7 +10,7 @@ import {
   maskToBlocks,
   paintBlock,
 } from '@/lib/providers/manual'
-import SlotGrid, { type GridSize } from './SlotGrid'
+import SlotGrid, { type GridSize, slotAt, slotAtPoint } from './SlotGrid'
 
 interface ManualPainterProps {
   room: RoomGrid
@@ -102,6 +102,7 @@ export default function ManualPainter({
       <SlotGrid
         room={room}
         size={size}
+        label="Your busy times"
         cellClass={cellClass}
         onPointerDown={start}
         onPointerMove={extend}
@@ -137,19 +138,6 @@ export default function ManualPainter({
       )}
     </div>
   )
-}
-
-/** Slot under a pointer, or null when it is not over a cell. */
-function slotAt(target: EventTarget | null): number | null {
-  if (!(target instanceof Element)) return null
-  const raw = target.closest(`[data-slot]`)?.getAttribute('data-slot')
-  if (raw === null || raw === undefined) return null
-  const slot = Number(raw)
-  return Number.isInteger(slot) ? slot : null
-}
-
-function slotAtPoint(x: number, y: number): number | null {
-  return slotAt(document.elementFromPoint(x, y))
 }
 
 function duration(minutes: number): string {

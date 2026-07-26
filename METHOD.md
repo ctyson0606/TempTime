@@ -83,14 +83,45 @@ the shape every equality check takes when the thing being measured never
 appeared. Anchor on a value known to be non-empty (`restored > 0 && restored ===
 painted`) so that finding nothing fails instead of agreeing with itself.
 
+**A failure that stops after a change is not a failure the change fixed.** Put
+the suspected cause back and confirm the failure returns. Skipping that step
+costs more than the time it saves, because what gets written down is a diagnosis
+rather than a coincidence, and the next reader has no way to tell which they are
+holding.
+
+This is not hypothetical here. A subscription delivered nothing, a plausible race
+was found in a library's source, the fix went in, the run went green, and the
+cause was written into two files as established fact. Reverting the fix later
+produced three green runs in a row: the race was real in the source and had
+nothing to do with the failure, which remains unexplained. The comments had to be
+rewritten to say so. Note the asymmetry — sabotaging the *code* proves a test has
+power, and sabotaging your own *fix* proves the diagnosis does.
+
+**A production number is not asserted from a machine that is not production.**
+Where a target describes deployed behaviour — a latency, a throughput — measure
+it and print it, but do not fail a local run against it, and say in the spec why.
+Asserting it locally tests where the laptop is. The corollary is that this only
+holds where the difference is structural and named: "it is slow here" is not a
+reason to stop asserting something.
+
 **UI is verified by driving it, not by reading it.** A component that type-checks
 and builds has been proven to compile, nothing more. Drive the running app in a
 real browser, assert on what the DOM actually says — computed styles, element
-counts, the text a user would read — and screenshot it to look at. Two traps
+counts, the text a user would read — and screenshot it to look at. Four traps
 found this way: a screenshot taken immediately after a click captures CSS
 transitions mid-flight and looks broken when it is not, so settle before
-capturing; and a probe that finds nothing is usually a wrong selector rather than
-a real absence, so make it assert something known-present first.
+capturing; a probe that finds nothing is usually a wrong selector rather than a
+real absence, so make it assert something known-present first; anything fetched
+after the page loads is a round trip behind it, so wait for the text that proves
+the data arrived rather than for the page; and an element below the fold has real
+coordinates that are off-screen, so scroll it into view before sending a pointer
+anywhere near it.
+
+Assert the shape of the answer, not its presence. "Some cells are coloured" is
+satisfied by a scale that renders one colour everywhere; grouping the cells by
+computed colour and requiring the group sizes to come out `49,10,5` is an
+assertion about the arithmetic behind the picture. Any probe that would pass on a
+plausibly broken render is measuring the wrong thing.
 
 ### Spec changes
 
@@ -195,6 +226,22 @@ Update semantics:
   applied — the first one here did, within an hour — and the alternative is
   hand-picking which statements to skip, in a SQL console, against the live
   database.
+- **An aggregate over one contributor is that contributor's data.** Overlaying a
+  single mask reproduces it exactly, so an aggregate endpoint anonymises nothing
+  until a second person answers. Whether that is acceptable is a product decision
+  to take deliberately; it is not a property to assume from the word "aggregate".
+- **Two of the same component on one page need telling apart.** The room draws
+  two grids — the one you paint and the one showing everyone — and they share
+  every attribute their cells carry. Give each an accessible name (`role="group"`
+  with `aria-label`): a screen reader needs it, and it is also the only stable way
+  to select one of them. Adding the second is what breaks the first one's tests,
+  so name both at the moment the second appears.
+- **A connection that reports success has proved the handshake, not the
+  delivery.** A Supabase channel returns `SUBSCRIBED` on the strength of the join
+  alone; whether any event then arrives depends on the RLS policy the socket's
+  token resolves to, and a subscription that connects and stays silent looks
+  exactly like a quiet room. The same gap exists for any queue, webhook or
+  stream. Assert that something arrived, never that something connected.
 - **Caller errors return, configuration errors throw.** A bad credential or
   malformed input is the caller's problem: return `null` or a typed result the
   route maps to a status code, without revealing which check failed. A missing or
@@ -274,6 +321,30 @@ Update semantics:
   insert came back as a flat `permission denied`, which reads like a policy bug
   and is not one. Grant the server role explicitly, and never conclude from
   "this role ignores RLS" that it needs nothing else.
+- **Proving nothing leaked by searching for the field's name.** A privacy check
+  that greps a response for `busy_mask` passes the instant the leak arrives under
+  any other key. Demonstrated here: a route deliberately returning every mask
+  under `masks` sailed straight through that assertion, and only a content-shaped
+  one — anything `totalSlots` long made solely of 0 and 1 — caught it. Match the
+  shape of the secret, not the name it usually travels under. Note that the weak
+  check had passed on the honest route too, so nothing but breaking it on purpose
+  could have told the two apart.
+- **A test double that replaces a platform primitive globally.** Simulating a
+  dropped connection by overwriting `window.WebSocket` also took out Next's HMR
+  client, so the page never hydrated and the probe sat waiting for a dialog that
+  was never going to render — a failure with nothing to do with the feature under
+  test. Cut the one connection being tested, by URL
+  (`routeWebSocket(/realtime/)`), not the capability the whole platform uses.
+- **Reading colour channels out of a computed style.** Tailwind 4 reports
+  `lab(96.1634 0.0993013 -0.364029)`, not `rgb(...)`, so pulling the digits out
+  and asking which channel is largest is not wrong so much as meaningless — it
+  counted every grey cell as green. A probe rarely needs to know what colour
+  something is, only which cells match which, and comparing the strings for
+  equality answers that in any colour space the framework decides to emit.
+- **`process.exit()` in a `finally` that has just closed a browser.** It tears
+  the process down while the driver's handles are still closing and libuv aborts
+  on Windows, so a run where every assertion passed reports a crash and a
+  non-zero status. Set `process.exitCode` and let Node exit on its own.
 - **PowerShell here-strings (`@'...'@`) in the Bash tool.** Bash does not parse
   them; the `@` characters end up inside the string. This silently corrupted a
   commit message. Two shells are available in this environment and each needs its
