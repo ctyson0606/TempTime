@@ -64,6 +64,15 @@ then revert and re-run.
 
 This is cheap and it is the only evidence that a green suite means anything.
 
+**UI is verified by driving it, not by reading it.** A component that type-checks
+and builds has been proven to compile, nothing more. Drive the running app in a
+real browser, assert on what the DOM actually says — computed styles, element
+counts, the text a user would read — and screenshot it to look at. Two traps
+found this way: a screenshot taken immediately after a click captures CSS
+transitions mid-flight and looks broken when it is not, so settle before
+capturing; and a probe that finds nothing is usually a wrong selector rather than
+a real absence, so make it assert something known-present first.
+
 ### Spec changes
 
 When a requirement changes after the spec is written, patching the section that
@@ -135,6 +144,18 @@ Update semantics:
 - Agent definitions live in `.claude/agents/`, tracked in git. They carry
   principles of *how* work is done; anything situational stays in the two memory
   files.
+- **Browser-only values are read through `useSyncExternalStore`.** The timezone,
+  the page origin, anything in storage: none of them exist during the server
+  render, and setting them from an effect is both a cascading render and
+  something React's lint now rejects. `useSyncExternalStore` states the two
+  answers explicitly — one for the server pass, one for the browser. Its snapshot
+  must be a primitive or a cached reference; returning a fresh object each call
+  re-renders forever.
+- **Anything that might run in a browser or on the Edge uses Web Crypto.**
+  `node:crypto` decides the runtime by accident, which is the same reason `jose`
+  was chosen over `jsonwebtoken`. Server-only primitives with no Web Crypto
+  equivalent — `timingSafeEqual`, for one — are the exception, and they belong in
+  modules that never reach the client bundle.
 - **Caller errors return, configuration errors throw.** A bad credential or
   malformed input is the caller's problem: return `null` or a typed result the
   route maps to a status code, without revealing which check failed. A missing or
@@ -183,6 +204,23 @@ Update semantics:
 - **Calling `jwtVerify` without an `algorithms` allow-list.** It then trusts the
   token's own `alg` header. Demonstrated here: with the allow-list removed, a
   token signed HS512 passed a verifier that must only accept HS256.
+- **Turning an iCalendar time into an instant with `toJSDate()`.** A `DTSTART`
+  with no zone is "floating": local time wherever you happen to be. `toJSDate()`
+  resolves that against the machine doing the reading, so the same file imported
+  by two members lands on different slots, and the server would disagree with
+  both. Resolve by TZID through the tz database, and read a floating time in the
+  room's timezone — the room has exactly one, and every grid label is drawn in it.
+- **Seeding a recurrence iterator with a later date to skip ahead.** It looks
+  like a fast-forward and is not: ical.js treats the seed as the previous
+  occurrence, so a daily 09:00 meeting comes back at whatever hour the seed
+  carried. Expansion has to start at DTSTART and walk. Cap the walk, and *report*
+  hitting the cap — an event that silently fails to appear is the worst outcome
+  available.
+- **Using `??` for a default the caller can legitimately return empty.** It only
+  fires on null and undefined, so a callback returning `''` keeps the empty
+  string and the fallback never runs. Found when refactoring the grid: cells lost
+  their background because the painter returned `''` for "nothing special here".
+  Either return `undefined` and mean it, or test for the value you actually get.
 - **PowerShell here-strings (`@'...'@`) in the Bash tool.** Bash does not parse
   them; the `@` characters end up inside the string. This silently corrupted a
   commit message. Two shells are available in this environment and each needs its
