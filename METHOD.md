@@ -174,11 +174,23 @@ Deploying does not fix this by itself, because the measuring machine is still
 not production. Measure the transport floor before attributing any latency to
 the system under test: one request that does no work, and whatever the platform
 will say about where the request arrived. A live-update figure of 1843ms read
-like the application until the floor was taken — an empty 404 cost 2.06s, the
-TCP handshake to a host in the same city as the database took 260ms, and
-Vercel's `x-vercel-id` reported every request entering their network in London.
-Nothing in that number was about the code. A measurement whose floor is unknown
-is not a slow result; it is an unread instrument.
+like the application until the floor was taken — a request that does nothing
+cost seconds, and `x-vercel-id` reported every request entering the provider's
+network in London, a continent away from both the app and its database. A
+measurement whose floor is unknown is not a slow result; it is an unread
+instrument.
+
+**And measure that floor the way the system under test uses the network.** The
+first attempt here did not, and the number written down was wrong by a factor of
+four. A single `curl` pays DNS, TCP and a TLS handshake, so it reports 2–3s where
+the second and third requests on the same connection take 0.52s; the application
+holds a warm connection and an open socket and never pays the handshake twice.
+The giveaway was an observed live update arriving in 806ms — *faster than the
+floor*, which is impossible and therefore means the floor was measuring something
+the application does not do. Send several requests over one connection and take
+the later ones. A floor measured cold does not overstate the latency a little; it
+overstates it by however long a handshake takes, which on a bad route is most of
+the number.
 
 **UI is verified by driving it, not by reading it.** A component that type-checks
 and builds has been proven to compile, nothing more. Drive the running app in a

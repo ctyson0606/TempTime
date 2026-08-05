@@ -111,7 +111,7 @@ try {
   await join(a, code, 'Alice')
 
   const heatGrid = a.getByRole('group', { name: "Everyone's free time" })
-  const painter = a.getByRole('group', { name: 'Your busy times' })
+  const painter = a.getByRole('group', { name: 'Your free times' })
 
   // The results arrive from GET /heatmap, so they are a fetch behind the join.
   // Asserting before that lands tests only how fast the network is.
@@ -161,8 +161,8 @@ try {
   await a.waitForSelector('text=Send again', { timeout: 15000 })
 
   await a.waitForSelector('text=1 person has answered', { timeout: 15000 })
-  // Alice is busy for slots 0-9, free for the other 54. One submitter, so the
-  // overlay must fall into exactly those two groups.
+  // Alice is free for slots 0-9 and unavailable for the other 54. One submitter,
+  // so the overlay must fall into exactly those two groups.
   const aliceOnly = await histogram(heatGrid)
   report(
     aliceOnly.join() === `${cells - 10},10`,
@@ -174,7 +174,7 @@ try {
   const b = await bob.newPage()
   await join(b, code, 'Bob')
   await b.getByRole('button', { name: 'Paint by hand' }).click()
-  await drag(b, b.getByRole('group', { name: 'Your busy times' }), 5, 14)
+  await drag(b, b.getByRole('group', { name: 'Your free times' }), 5, 14)
   await b.getByRole('button', { name: 'Send my times' }).click()
   await b.waitForSelector('text=Send again', { timeout: 15000 })
 
@@ -192,24 +192,27 @@ try {
   report(bobMembers === 2, 'Bob sees both members marked as sent', `${bobMembers}`)
 
   // --- the overlay discriminates ------------------------------------------
-  // Slots 0-4 free for Bob only, 5-9 free for nobody, 10-14 free for Alice only,
-  // 15+ free for both. Reading three different cells must give three different
-  // answers; a scale that renders one colour everywhere would pass a count.
+  // Alice offered 0-9 and Bob offered 5-14, so: 0-4 suits Alice only, 5-9 suits
+  // both, 10-14 suits Bob only, and 15+ suits nobody. Reading three different
+  // cells must give three different answers; a scale that renders one colour
+  // everywhere would pass a count.
   const bHeat = b.getByRole('group', { name: "Everyone's free time" })
   const shade = async (slot) =>
     bHeat
       .locator(`[data-slot="${slot}"]`)
       .evaluate((n) => getComputedStyle(n).backgroundColor)
 
-  const [nobody, one, both] = [await shade(7), await shade(2), await shade(20)]
+  const [nobody, one, both] = [await shade(20), await shade(2), await shade(7)]
   report(
     nobody !== one && one !== both && nobody !== both,
     'nobody-free, one-free and both-free are three different colours',
     `${nobody} / ${one} / ${both}`,
   )
-  // 5 slots suit nobody, 10 suit one of them, 49 suit both. Group sizes are
+  // 49 slots suit nobody, 10 suit one of them, 5 suit both. Group sizes are
   // what makes this an assertion about the arithmetic rather than about there
-  // being some colour on screen.
+  // being some colour on screen. The three numbers are the same multiset the
+  // busy-first version asserted, which is why the flip did not fail this line —
+  // the roles of 49 and 5 swapped, and only the comment could tell.
   const shared = await histogram(bHeat)
   report(
     shared.join() === '49,10,5',
@@ -218,7 +221,7 @@ try {
   )
 
   // --- hovering reads a slot out -------------------------------------------
-  const cell = await cellBox(bHeat, 20)
+  const cell = await cellBox(bHeat, 7)
   await b.mouse.move(cell.x + cell.width / 2, cell.y + cell.height / 2)
   // The em dash keeps this off the section heading "When everyone is free",
   // which the first version of this matched instead of the readout.
@@ -258,8 +261,9 @@ try {
   await b.waitForSelector('text=1 person has answered', { timeout: 15000 })
   report(true, 'withdrawing drops the overlay back to one answer')
 
-  // Back to Alice's two groups: 54 free, 10 not. Bob's withdrawal has to remove
-  // his answer from the arithmetic, not merely stop counting him.
+  // Back to Alice's two groups: 10 slots she offered, 54 she did not. Bob's
+  // withdrawal has to remove his answer from the arithmetic, not merely stop
+  // counting him.
   const afterWithdraw = await histogram(bHeat)
   report(
     afterWithdraw.join() === `${cells - 10},10`,

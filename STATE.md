@@ -218,20 +218,24 @@ there now is one.
   zero-length tap (60ms behaves the same). Do **not** make the probe wait longer:
   there is no handler run to wait for. The feature works when it works, and a
   real finger has never been observed to miss.
-- **What is the live-update latency in production?** No measured figure exists,
-  though the target is no longer unsupported: on 2026-08-05 a second person on
-  their own machine saw an answer arrive on the socket within a perceived second
-  or two (`PLAN.md` §12). That is an observation, not a number, and nobody timed
-  it. Deploying did not produce one either. `drive-heatmap.mjs` printed 1843ms
-  against the deployment, which is inside the two-second target and means
-  nothing on its own: the
-  measuring machine reaches Vercel through London (`x-vercel-id` reads
-  `lhr1::hnd1::…` on every request), TCP to the Tokyo database takes 260ms from
-  here, and an empty 404 costs 2.06s. The app-to-database hop the target was
-  written around is now single-digit milliseconds, so what is left in that
-  number is almost entirely this machine's route. Before trusting any figure,
-  check the edge code in `x-vercel-id` and time a request that does no work.
-  The general rule is in METHOD.md → Verification.
+- **What is the live-update latency in production?** Better understood than it
+  was, and still not a clean number. Two measurements exist against the
+  deployment: 1843ms before the free-time flip and **806ms after it**, both from
+  this machine, both inside the two-second target. The second one is what forced
+  a correction: 806ms is *faster* than the "transport floor" of ~2s recorded
+  earlier, which is impossible, and the explanation is that the floor had been
+  measured with a cold `curl` — DNS, TCP and TLS on every sample. Over a reused
+  connection this machine's per-request cost is **0.52s**, and the app holds warm
+  connections and an open socket. So the honest reading is that a live update
+  costs roughly one warm round trip plus the `/heatmap` refetch, and that this
+  machine's route still inflates it: the traffic enters Vercel in London
+  (`x-vercel-id` reads `lhr1::hnd1::…`) and pays about 280ms of TCP handshake to
+  Tokyo. A figure from a normal Asian network is still worth taking; a second
+  person on their own machine perceived "a second or two" on 2026-08-05
+  (`PLAN.md` §12) but nobody timed it. The general rule, including the mistake,
+  is in METHOD.md → Verification. Before trusting any figure taken here: check
+  the edge code in `x-vercel-id`, and time the *second* request on a connection
+  rather than the first.
 - **How should the scale read with very few submitters?** With two people the
   levels in use are the third and the fifth, so "one of two is free" already looks
   fairly strong. It is legible and nobody has complained; whether it should
