@@ -1,7 +1,7 @@
 # STATE
 
-> Last updated: 2026-08-02 (M4 finished: headers, the mobile pass, the privacy
-> page and the README)
+> Last updated: 2026-08-05 (deployed, verified against the deployment, and
+> `PLAN.md` §12 run with a real second person)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -11,17 +11,26 @@ archived — git holds the history. For durable rules and workflow, see
 
 ## Current Focus
 
-**M4 is finished, and with it every milestone in `PLAN.md` §11.** The security
-headers, the mobile pass, the privacy page and the README are all in and all
-driven rather than read. Nothing on the milestone list is outstanding.
+**The app is deployed and reachable at `https://temp-time.vercel.app`.** Every
+milestone in `PLAN.md` §11 is complete, committed, pushed, and now verified
+against the deployment rather than only against a laptop.
 
-The next thing is deploying, and it is no longer one item among several — it is
-the only thing standing between the project and three questions that cannot be
-answered locally: whether two real people in two places can use a room
-(`PLAN.md` §12), what the live-update latency actually is next to the database,
-and whether the coarser cron cadence on a free tier is acceptable. Publishing
-also unlocks the second-stage calendar connectors, since Google's OAuth review
-requires a reachable privacy page and that page now exists.
+Two of the three questions that could only be answered by publishing are
+answered. The nonce CSP does survive a CDN in front of it — the pages hydrate
+online, which is not something a screenshot or a 200 could ever have shown. The
+daily cron path works end to end. The third, the live-update latency, is **not**
+answered and could not be: this machine's own network path swamps the
+measurement (see Open Questions).
+
+`PLAN.md` §12 has now been run with a real second person on a different machine,
+and it worked: the answer arrived with no reload, on the socket rather than the
+fallback, within a second or two. That is the last step in the spec that had
+never been executed.
+
+So the whole of what was planned is built, deployed and seen working by someone
+other than its author. The next body of work is the second-stage connectors,
+which publishing unblocked — Google's OAuth review needs a reachable privacy
+page, and there now is one.
 
 ---
 
@@ -108,27 +117,51 @@ requires a reachable privacy page and that page now exists.
   `verify-purge.mjs` and `verify-rls.mjs` create rooms against a limit of ten an
   hour, so a handful of runs an hour is the ceiling for those.
 - 232 tests, with `format:check`, `lint` and `typecheck` clean.
+- Deployed on Vercel (Hobby, team `ctyson`, project `temp-time`). Functions are
+  pinned to Tokyo `hnd1`, beside the database; all five variables from
+  `.env.example` are set for Production and Preview; `vercel.json`'s daily cron
+  is registered from the repository with no dashboard configuration.
+  Development and production share one Supabase project.
+- The deployment is verified, not assumed. Against `https://temp-time.vercel.app`:
+  `drive-ui.mjs` 21/21, `verify-headers.mjs` 22/22, `drive-heatmap.mjs` 28/28.
+  The first of those is the one that mattered — dragging, sending and deleting
+  are impossible on a page that has not hydrated, so passing them is the proof
+  that the nonce CSP works behind a CDN. The purge route answered 401 with no
+  credential, 401 with a wrong one, and `200 {"ok":true,"deleted":0}` with the
+  real one over `GET` + bearer, which is exactly how Vercel Cron calls it.
+- `PLAN.md` §12, the two-browser test, run on 2026-08-05 with a second person on
+  their own machine. Reported: the room updated on its own with no reload, the
+  badge read "Updating live" — so the Realtime socket, not the four-second
+  polling fallback — and it felt like a second or two. Observed by the user, not
+  instrumented; there is still no measured production figure (see Open
+  Questions).
 - Milestone coverage: `PLAN.md` §11 holds the per-item state; do not duplicate it
   here. M1 through M4 are all complete, acceptance tests included.
 
 **In Progress**
-- Nothing on the milestone list. The work in flight is deploying, which is a
-  decision (see Open Questions) rather than a task.
-- Three rounds of work are written and verified but **not committed**, at the
-  user's request: the purge route with the four absence notices; the CSP and
-  security headers; and this round's mobile pass, privacy page and README.
+- Nothing is half-built. The next work is the second-stage connectors, and it
+  starts with a decision rather than code (see Next Steps).
 
 **Blocked**
-- Nothing waits on an outside decision any more.
+- Nothing waits on an outside decision. Vercel's own first cron firing is a
+  wait rather than a block: `0 4 * * *` UTC, so the Cron tab is worth a look
+  from 2026-08-06 onwards to confirm the scheduler really sends the bearer
+  token it is documented to send.
 
 ---
 
 ## Next Steps
 
-1. Deploy. It is the only remaining step that turns deferred questions into
-   answerable ones: the two-browser test with a real friend (`PLAN.md` §12), the
-   coarser cron cadence on a free tier, and the live-update latency target.
-2. Then the second-stage connectors, in the order `PLAN.md` §8.2 argues for:
+1. Apply for the slow OAuth access now, before writing any of it. Google's
+   sensitive-scope review and TickTick's API application are queues measured in
+   weeks of somebody else's time, and Google's precondition — a reachable
+   privacy page — is satisfied as of 2026-08-05. Applying first turns the wait
+   into the development window instead of a gap after it.
+2. From 2026-08-06, check Vercel's Cron tab once. The route is proven; what is
+   not is that the scheduler sends `Authorization: Bearer $CRON_SECRET` as
+   documented. A silent 401 there looks like nothing at all, and `pg_cron` would
+   keep hiding it.
+3. Then the second-stage connectors, in the order `PLAN.md` §8.2 argues for:
    Todoist first because it needs nothing but OAuth, Google next because its
    sensitive-scope review is a queue rather than a build, TickTick last because
    its API application has no predictable timeline. Apply for the slow ones early
@@ -149,18 +182,20 @@ requires a reachable privacy page and that page now exists.
   proposed. Worth remembering rather than chasing: if it returns, this is the
   paragraph that says it has happened before, and the polling fallback is what
   keeps the room working while it is diagnosed.
-- **Where does the app itself run?** Deferrable; development runs locally. Two
-  constraints are known. A public URL is a precondition for the two-browser test
-  in `PLAN.md` §12 — a friend cannot reach `localhost`. And Vercel's Hobby plan
-  will not deploy a cron expression that runs more than once a day, so the
-  `api/cron/purge` backup is coarser there than `PLAN.md` §4.3 assumes; the
-  `pg_cron` schedule is the primary path and is unaffected. `vercel.json` now
-  exists and encodes that daily schedule, which leans towards Vercel without
-  settling it — it is one file to delete if somewhere else wins. Whatever is
-  chosen should sit in Tokyo, to
-  match the database — and that is also what makes the live-update target
-  measurable, since one of the two round trips an update costs is the
-  app-to-database hop.
+- **What is the live-update latency in production?** No measured figure exists,
+  though the target is no longer unsupported: on 2026-08-05 a second person on
+  their own machine saw an answer arrive on the socket within a perceived second
+  or two (`PLAN.md` §12). That is an observation, not a number, and nobody timed
+  it. Deploying did not produce one either. `drive-heatmap.mjs` printed 1843ms
+  against the deployment, which is inside the two-second target and means
+  nothing on its own: the
+  measuring machine reaches Vercel through London (`x-vercel-id` reads
+  `lhr1::hnd1::…` on every request), TCP to the Tokyo database takes 260ms from
+  here, and an empty 404 costs 2.06s. The app-to-database hop the target was
+  written around is now single-digit milliseconds, so what is left in that
+  number is almost entirely this machine's route. Before trusting any figure,
+  check the edge code in `x-vercel-id` and time a request that does no work.
+  The general rule is in METHOD.md → Verification.
 - **How should the scale read with very few submitters?** With two people the
   levels in use are the third and the fifth, so "one of two is free" already looks
   fairly strong. It is legible and nobody has complained; whether it should
@@ -188,6 +223,37 @@ requires a reachable privacy page and that page now exists.
 
 ## Recent Decisions
 
+- **2026-08-05 — Vercel, with the functions in Tokyo `hnd1`.** Hong Kong `hkg1`
+  was the live alternative and was rejected on arithmetic: it would save a
+  visitor roughly 20ms once per request and cost roughly 50ms on *every* query
+  a route makes, and the routes make more than one. Rendering every page per
+  request does not change that, since the render itself reads nothing. The
+  general rule is in METHOD.md → Conventions. Confirmed rather than assumed
+  after the redeploy: `x-vercel-id` reports `hnd1` as the function region.
+- **2026-08-05 — Development and production share one Supabase project, and the
+  triggers for splitting are written down.** A second project is not a
+  connection string: it is the three migrations, the region (fixed at creation),
+  "expose new tables" off, and enabling the legacy HS256 secret — two of which
+  have already gone wrong once each, and both failures read as something else.
+  It also doubles the idle-pause surface. The cost accepted in exchange is that
+  there is nowhere to rehearse a migration. Split when either arrives: someone
+  other than the user holds a room worth not destroying, or a migration appears
+  that is not purely additive. Note that `verify-purge.mjs` deletes only rooms
+  already past `expires_at`, which `pg_cron` deletes hourly anyway, so running
+  it against production costs nothing.
+- **2026-08-05 — Speed Insights is left off.** It injects a script from a Vercel
+  origin, and `script-src` is `'self'` plus a nonce with no `'strict-dynamic'`,
+  so it would be blocked while the dashboard reported it enabled. Turning it on
+  means opening the policy, which is a decision to take on its own terms rather
+  than a checkbox during setup.
+- **2026-08-05 — M4 shipped as one commit rather than three.** The work came in
+  three rounds, but `app/layout.tsx` and `components/RoomView.tsx` each carry
+  hunks from two of them, so splitting meant hand-built patches — and, worse,
+  three commits assert three verified states while only the final tree had been
+  run. Honestly producing three would have meant checking out and re-verifying
+  each intermediate, including a production build for the headers round. The
+  explanations live in the commit message instead, where `git log -S` finds
+  them anyway.
 - **2026-08-02 — The tap-target floor is 36px, taken from the design rather than
   from a platform guideline.** Apple's 44pt would have forced a redesign of
   controls nobody has complained about; "no control is a smaller target than the

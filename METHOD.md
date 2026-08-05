@@ -149,6 +149,16 @@ Asserting it locally tests where the laptop is. The corollary is that this only
 holds where the difference is structural and named: "it is slow here" is not a
 reason to stop asserting something.
 
+Deploying does not fix this by itself, because the measuring machine is still
+not production. Measure the transport floor before attributing any latency to
+the system under test: one request that does no work, and whatever the platform
+will say about where the request arrived. A live-update figure of 1843ms read
+like the application until the floor was taken — an empty 404 cost 2.06s, the
+TCP handshake to a host in the same city as the database took 260ms, and
+Vercel's `x-vercel-id` reported every request entering their network in London.
+Nothing in that number was about the code. A measurement whose floor is unknown
+is not a slow result; it is an unread instrument.
+
 **UI is verified by driving it, not by reading it.** A component that type-checks
 and builds has been proven to compile, nothing more. Drive the running app in a
 real browser, assert on what the DOM actually says — computed styles, element
@@ -314,7 +324,19 @@ Update semantics:
   caching problem and is invisible to every check short of driving a browser.
   Either render per request or keep per-request values out of the output; there
   is no third option. Decide which before writing the header, because the answer
-  is a rendering-strategy change, not a header tweak.
+  is a rendering-strategy change, not a header tweak. The same policy also
+  prices every later add-on: with `script-src` at `'self'` plus a nonce and no
+  `'strict-dynamic'`, a hosted analytics or monitoring snippet is a CSP decision
+  rather than a checkbox — and the host's dashboard will show it enabled while
+  the browser silently refuses to run it.
+- **Put the compute next to the hop that is paid per query.** A visitor pays the
+  distance to the application once per request; the application pays the
+  distance to the database once per *query*, and a route rarely makes only one.
+  A region chosen to sit nearer the visitor than the database therefore trades a
+  single saving against a repeated cost, and loses as soon as a route reads
+  twice. Rendering every page per request does not reverse this — there is no
+  static page for an edge to serve — because the render itself touches no
+  database.
 - **A tap is not a small hover.** A finger that lands without travelling fires
   `pointerdown` and `pointerup` and *no* `pointermove` at all, so anything
   driven off movement alone simply does not exist on a phone — a readout that
