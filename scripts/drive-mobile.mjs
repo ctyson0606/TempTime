@@ -30,6 +30,42 @@ const report = (pass, label, detail = '') => {
 const phone = devices['iPhone 12']
 
 /**
+ * An element's box once it has stopped moving.
+ *
+ * This page updates itself after it loads — the transport badge resolves, the
+ * member list fills in, the heatmap arrives — and each one shifts everything
+ * below it. Waiting a fixed 500ms is a guess about how long that takes; sampling
+ * until two consecutive reads agree measures it instead. Anything still moving
+ * after the full budget is a finding, not something to tap at and hope.
+ *
+ * It does *not* fix the intermittent readout assertion below, and was kept only
+ * because measuring beats guessing. That failure was chased far enough to rule
+ * this out as its cause: the coordinate is identical on passing and failing
+ * runs, the cell under it is the right one, and a native pointerdown listener
+ * sees the event arrive on that cell — while `Heatmap`'s own `onPointerDown`
+ * does not run at all, on roughly half of runs, in a production build as well as
+ * in development. Unexplained. Do not "fix" it by waiting longer: the handler
+ * never runs, so there is nothing to wait for.
+ */
+const stableBox = async (locator, { gap = 150, tries = 20 } = {}) => {
+  let previous = null
+  for (let i = 0; i < tries; i++) {
+    const box = await locator.boundingBox()
+    if (
+      box !== null &&
+      previous !== null &&
+      Math.round(box.x) === Math.round(previous.x) &&
+      Math.round(box.y) === Math.round(previous.y)
+    ) {
+      return box
+    }
+    previous = box
+    await locator.page().waitForTimeout(gap)
+  }
+  throw new Error(`element never stopped moving after ${tries * gap}ms`)
+}
+
+/**
  * Does the *page* scroll sideways, and if so what is sticking out?
  *
  * The offenders are filtered to elements with no horizontally scrollable
@@ -194,7 +230,7 @@ try {
   )
 
   // --- the grid's own scroller ---------------------------------------------
-  const painter = page.getByRole('group', { name: 'Your busy times' })
+  const painter = page.getByRole('group', { name: 'Your free times' })
   const scroller = await painter.evaluate((el) => ({
     scrollWidth: el.scrollWidth,
     clientWidth: el.clientWidth,
@@ -229,13 +265,13 @@ try {
   )
   await page.waitForTimeout(200)
 
-  const busyCells = () =>
+  const freeCells = () =>
     painter
       .locator('[data-slot]')
       .evaluateAll(
         (cells) => cells.filter((c) => c.className.includes('bg-indigo-500')).length,
       )
-  const painted = await busyCells()
+  const painted = await freeCells()
   report(painted > 0, 'a finger drag paints slots', `${painted} cells`)
   report(
     (await page.evaluate(() => window.scrollY)) === before,
@@ -267,19 +303,18 @@ try {
   // readout is broken" when it is the probe that missed.
   // Settle first. This page updates itself: the transport badge flips once the
   // socket resolves and the member list fills in, and either one shifts
-  // everything below it. A coordinate measured before that lands somewhere else
-  // by the time the touch is dispatched — which is what made this assertion
-  // fail one run in three while the feature worked perfectly.
+  // everything below it. Waiting for the badge is a precondition rather than a
+  // settle — it proves the transport resolved, not that the layout has stopped —
+  // so the coordinate itself is taken from `stableBox`, which watches until the
+  // cell stops moving.
   await page
     .getByText(/Updating live|Checking every few seconds/)
     .first()
     .waitFor({ timeout: 15000 })
-  await page.waitForTimeout(500)
 
   const slotCell = overlay.locator('[data-slot="4"]')
   await slotCell.scrollIntoViewIfNeeded()
-  await page.waitForTimeout(200)
-  const target = await slotCell.boundingBox()
+  const target = await stableBox(slotCell)
   const point = { x: target.x + target.width / 2, y: target.y + target.height / 2 }
 
   // Belt to the braces: ask the page what is actually under the point about to

@@ -4,8 +4,10 @@ Find a time everyone is free, without anyone signing up — and without anyone,
 including whoever runs the server, learning what is in your calendar.
 
 You create a room, pick some dates, and send people a six-character code. They
-mark when they are busy, either by dragging on a grid or by importing a calendar
-file. What leaves their browser is a row of `0`s and `1`s, one digit per
+drag across a grid to mark when they are free, and can import a calendar file to
+take back the hours that are already spoken for — an import only ever subtracts,
+because an empty hour on a calendar is not the same as an hour someone is
+available. What leaves their browser is a row of `0`s and `1`s, one digit per
 half-hour slot. Event names, real start and end times, and which app they came
 from never go anywhere. The room shows everyone's overlap, then destroys itself
 once its last date has passed.

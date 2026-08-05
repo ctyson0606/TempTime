@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { type RoomGrid, emptyMask } from '../lib/slots'
 import {
   blockSlots,
-  busyCount,
-  isBusy,
+  markedCount,
+  isMarked,
   maskToBlocks,
   paintBlock,
   slotDay,
@@ -104,11 +104,11 @@ describe('paintBlock', () => {
 
   it('erases with the same rectangle', () => {
     const painted = paintBlock(room, emptyMask(room), slot(0, 0), slot(2, 31), '1')
-    expect(busyCount(painted)).toBe(96)
+    expect(markedCount(painted)).toBe(96)
     const erased = paintBlock(room, painted, slot(1, 4), slot(1, 6), '0')
-    expect(busyCount(erased)).toBe(93)
-    expect(isBusy(erased, slot(1, 5))).toBe(false)
-    expect(isBusy(erased, slot(1, 7))).toBe(true)
+    expect(markedCount(erased)).toBe(93)
+    expect(isMarked(erased, slot(1, 5))).toBe(false)
+    expect(isMarked(erased, slot(1, 7))).toBe(true)
   })
 
   it('refuses a mask that does not fit the room', () => {

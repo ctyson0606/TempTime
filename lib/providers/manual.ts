@@ -8,12 +8,17 @@ import {
 import type { BusyBlock, ProviderId } from './types'
 
 /**
- * Hand-painted busy time.
+ * Hand-painted free time.
  *
  * Deliberately not a `BusyProvider`: there is nothing to connect to and nothing
  * to fetch. The drag *is* the input, so this module holds the mask arithmetic the
  * painter needs and nothing else. Providers that really fetch — `ics`, and the
- * platforms after it — implement that interface instead.
+ * platforms after it — implement that interface instead, and what they fetch is
+ * still busy time.
+ *
+ * The arithmetic here is about *which slots are set*, not about what being set
+ * means. What the painter sets means free (PLAN.md section 3.4); the names in
+ * this module say `marked` for exactly that reason.
  */
 export const MANUAL: ProviderId = 'manual'
 
@@ -27,11 +32,11 @@ export function slotOffset(room: RoomGrid, slot: number): number {
   return slot % slotsPerDay(room)
 }
 
-export function isBusy(mask: string, slot: number): boolean {
+export function isMarked(mask: string, slot: number): boolean {
   return mask[slot] === '1'
 }
 
-export function busyCount(mask: string): number {
+export function markedCount(mask: string): number {
   let count = 0
   for (const cell of mask) if (cell === '1') count++
   return count
@@ -89,7 +94,7 @@ export function paintBlock(
 
 /**
  * The mask read back as human-readable intervals, for showing someone what they
- * marked.
+ * marked. On the painter's mask that is the time they are offering.
  *
  * Runs stop at a day boundary. Indices being adjacent does not make them adjacent
  * in time — one day's last slot ends at 24:00 and the next day's first starts at
@@ -109,11 +114,11 @@ export function maskToBlocks(room: RoomGrid, mask: string): BusyBlock[] {
     for (let offset = 0; offset <= perDay; offset++) {
       const slot = day * perDay + offset
       // The extra iteration past the day's last slot closes an open run.
-      const busy = offset < perDay && isBusy(mask, slot)
+      const set = offset < perDay && isMarked(mask, slot)
 
-      if (busy && runStart === null) {
+      if (set && runStart === null) {
         runStart = slot
-      } else if (!busy && runStart !== null) {
+      } else if (!set && runStart !== null) {
         blocks.push({
           id: `${MANUAL}:${runStart}-${slot}`,
           start: slotRange(room, runStart).start.toJSDate(),

@@ -29,7 +29,13 @@ import {
 } from '@/lib/roomSession'
 import { type RealtimeMode, watchRoom } from '@/lib/realtime'
 import { loadImport } from '@/lib/importCache'
-import { type RoomGrid, blocksToMask, emptyMask, isValidMask } from '@/lib/slots'
+import {
+  type RoomGrid,
+  blocksToMask,
+  emptyMask,
+  invertMask,
+  isValidMask,
+} from '@/lib/slots'
 import BestSlots from './BestSlots'
 import BusyInput from './BusyInput'
 import CopyButton from './CopyButton'
@@ -86,12 +92,14 @@ function statusFromFailure(
 }
 
 /**
- * Which sources this mask came from, worked out rather than tracked.
+ * Which sources this mask came from, worked out rather than tracked. Takes the
+ * *submitted* mask — busy time — not the free-time mask the grid paints.
  *
  * `sources` is descriptive metadata — it does not affect a single slot — so
  * reconstructing it here is cheaper than threading it up through the painter
  * and the checklist. Anything the ticked imports account for is `ics`; anything
- * left over was drawn by hand.
+ * left over is busy because its owner never offered it, which is a decision made
+ * by hand.
  */
 function deriveSources(room: RoomGrid, code: string, mask: string): string[] {
   const cached = loadImport(code)
@@ -203,9 +211,11 @@ export default function RoomView({ code }: { code: string }) {
       if (cancelled || !result.ok) return
       setSubmittedAt(result.data.updatedAt)
       // Seed the grid from what was sent, but never over a local draft: an
-      // unsent edit is the more recent intention of the two.
+      // unsent edit is the more recent intention of the two. Inverted on the way
+      // in — the API speaks busy time, the grid speaks free time, and this is
+      // one of the two places that conversion is allowed to happen.
       if (result.data.busyMask !== null && readDraftMask(code) === null) {
-        saveDraftMask(code, result.data.busyMask)
+        saveDraftMask(code, invertMask(result.data.busyMask))
       }
     })
 
@@ -272,10 +282,12 @@ export default function RoomView({ code }: { code: string }) {
     if (result.ok) setHeatmap(result.data)
   }
 
-  const send = async (room: RoomDetail, mask: string) => {
+  /** `free` is what the grid holds; everything past this line is busy time. */
+  const send = async (room: RoomDetail, free: string) => {
     if (token === null) return
+    const busy = invertMask(free)
     setSubmitting(true)
-    const result = await submitMask(code, token, mask, deriveSources(room, code, mask))
+    const result = await submitMask(code, token, busy, deriveSources(room, code, busy))
     setSubmitting(false)
 
     if (!result.ok) {
@@ -399,9 +411,22 @@ export default function RoomView({ code }: { code: string }) {
   const { room } = status
   const roomUrl = `${origin}/r/${room.code}`
   // A draft painted against a different grid is treated as no draft at all,
-  // rather than crashing the page it is being drawn on.
+  // rather than crashing the page it is being drawn on. Free time, not busy.
   const mask =
     draftMask !== null && isValidMask(room, draftMask) ? draftMask : emptyMask(room)
+  /**
+   * Nothing marked free cannot be sent, and this is not the same rule as the old
+   * one it replaces.
+   *
+   * An empty *busy* mask used to mean "free the whole time" — a real answer, and
+   * deliberately allowed. Inverted, the empty grid means "free at no point",
+   * which is not a useful answer but is a very destructive one: a submitter who
+   * is busy everywhere counts towards `submittedCount` and makes "everyone is
+   * free" impossible in every slot, flattening the whole room into the fallback
+   * tier. Someone for whom none of the days work says that better by not sending
+   * — the member list then shows them as still to answer, which is true.
+   */
+  const nothingOffered = !mask.includes('1')
 
   return (
     <div className="flex flex-col gap-6">
@@ -465,9 +490,11 @@ export default function RoomView({ code }: { code: string }) {
                 {submittedAt === null ? 'Not sent yet' : 'Sent'}
               </h2>
               <p className="mt-1 text-xs text-zinc-500">
-                {submittedAt === null
-                  ? 'Only the string of 0s and 1s is sent — never an event name.'
-                  : `Last sent ${new Date(submittedAt).toLocaleString()}. Send again any time to change it.`}
+                {nothingOffered
+                  ? 'Mark at least one slot as free first. If none of these days work for you, leaving this unsent says so more clearly than sending an empty answer.'
+                  : submittedAt === null
+                    ? 'Only the string of 0s and 1s is sent — never an event name.'
+                    : `Last sent ${new Date(submittedAt).toLocaleString()}. Send again any time to change it.`}
               </p>
             </div>
             <div className="flex gap-2">
@@ -484,7 +511,7 @@ export default function RoomView({ code }: { code: string }) {
               <button
                 type="button"
                 onClick={() => void send(room, mask)}
-                disabled={submitting}
+                disabled={submitting || nothingOffered}
                 className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white enabled:hover:bg-indigo-500 disabled:opacity-40"
               >
                 {submitting

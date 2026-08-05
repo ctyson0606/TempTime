@@ -6,7 +6,7 @@ import type { BusyBlock } from '@/lib/providers/types'
 interface PrivacyChecklistProps {
   blocks: BusyBlock[]
   timezone: string
-  /** Ids that will count as busy. Everything else is treated as free time. */
+  /** Ids that will be taken out of the free time. Everything else is left alone. */
   selected: ReadonlySet<string>
   onToggle: (id: string) => void
   onSelectAll: (all: boolean) => void
@@ -21,9 +21,9 @@ interface PrivacyChecklistProps {
  *
  * This is the product's actual difference from every other scheduling tool, so
  * the wording has to be unambiguous — unticking is not "hide this from the list",
- * it is "treat this time as free". Titles are on screen because you cannot decide
- * without seeing them, and they are dropped at this boundary: only the 0/1 mask
- * goes any further.
+ * it is "leave that time in what I am offering". Titles are on screen because you
+ * cannot decide without seeing them, and they are dropped at this boundary: only
+ * the 0/1 mask goes any further.
  */
 export default function PrivacyChecklist({
   blocks,
@@ -65,8 +65,9 @@ export default function PrivacyChecklist({
       </div>
 
       <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-        Unticked events count as time you are free. The names below are only ever on
-        this screen — they are not sent anywhere, and they are not what gets submitted.
+        Ticked events are taken out of the time you marked as free. Unticked ones change
+        nothing. The names below are only ever on this screen — they are not sent
+        anywhere, and they are not what gets submitted.
       </p>
 
       {notice != null && notice !== '' && (
@@ -101,7 +102,7 @@ export default function PrivacyChecklist({
           disabled={none}
           className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-medium text-white enabled:hover:bg-indigo-500 disabled:opacity-40"
         >
-          Mark {selected.size} as busy
+          Take {selected.size} out of my free time
         </button>
         <button
           type="button"

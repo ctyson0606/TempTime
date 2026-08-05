@@ -2,11 +2,11 @@
 
 import { type PointerEvent as ReactPointerEvent, useMemo, useState } from 'react'
 import { DateTime } from 'luxon'
-import { type RoomGrid, emptyMask, totalSlots } from '@/lib/slots'
+import { type RoomGrid, emptyMask, fullMask, invertMask, totalSlots } from '@/lib/slots'
 import {
   blockSlots,
-  busyCount,
-  isBusy,
+  isMarked,
+  markedCount,
   maskToBlocks,
   paintBlock,
 } from '@/lib/providers/manual'
@@ -17,7 +17,7 @@ interface ManualPainterProps {
   mask: string
   onChange: (mask: string) => void
   size?: GridSize
-  /** Slots an import would add, shown lighter until they are confirmed. */
+  /** Slots an import would take away, shown in the removing colour until confirmed. */
   pending?: string | null
 }
 
@@ -28,17 +28,24 @@ interface Drag {
   value: '0' | '1'
 }
 
-const BUSY = 'bg-indigo-500'
+/**
+ * Indigo, not the green the results grid uses.
+ *
+ * This grid is what one person is offering; the overlay is what everybody
+ * together can do. Painting them the same colour would suggest the cell in front
+ * of you means the same thing in both, and it does not.
+ */
+const FREE = 'bg-indigo-500'
 const PAINTING = 'bg-indigo-300 dark:bg-indigo-400'
 const ERASING = 'bg-zinc-200 dark:bg-zinc-700'
-/** Imported but not yet confirmed — see `BusyInput`. */
-const PENDING = 'bg-indigo-200 dark:bg-indigo-800'
+/** Imported, and about to be taken out of the offer — see `BusyInput`. */
+const PENDING_REMOVAL = 'bg-rose-400 dark:bg-rose-700'
 
 /** How many intervals to spell out before summarising the rest. */
 const BLOCKS_SHOWN = 6
 
 /**
- * Drag across the grid to mark busy time.
+ * Drag across the grid to mark the time you are free.
  *
  * The gesture works the same with a mouse and a finger, so it is built on pointer
  * events and hit-testing rather than per-cell mouse handlers: during a touch drag
@@ -66,8 +73,10 @@ export default function ManualPainter({
   // Undefined leaves the cell with the grid's own empty look.
   const cellClass = (slot: number) => {
     if (preview?.has(slot)) return drag?.value === '1' ? PAINTING : ERASING
-    if (isBusy(mask, slot)) return BUSY
-    return pending !== null && isBusy(pending, slot) ? PENDING : undefined
+    if (!isMarked(mask, slot)) return undefined
+    // Only a slot that was offered can be taken away, so the removal colour
+    // never appears on a cell the import would not actually change.
+    return pending !== null && isMarked(pending, slot) ? PENDING_REMOVAL : FREE
   }
 
   const start = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -76,7 +85,7 @@ export default function ManualPainter({
     // Keeps the move and up events coming even once the pointer leaves this
     // column, which every multi-day drag does immediately.
     event.currentTarget.setPointerCapture(event.pointerId)
-    setDrag({ anchor: slot, focus: slot, value: isBusy(mask, slot) ? '0' : '1' })
+    setDrag({ anchor: slot, focus: slot, value: isMarked(mask, slot) ? '0' : '1' })
   }
 
   const extend = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -94,7 +103,7 @@ export default function ManualPainter({
     setDrag(null)
   }
 
-  const marked = busyCount(mask)
+  const marked = markedCount(mask)
   const blocks = useMemo(() => maskToBlocks(room, mask), [room, mask])
 
   return (
@@ -102,7 +111,7 @@ export default function ManualPainter({
       <SlotGrid
         room={room}
         size={size}
-        label="Your busy times"
+        label="Your free times"
         cellClass={cellClass}
         onPointerDown={start}
         onPointerMove={extend}
@@ -113,17 +122,31 @@ export default function ManualPainter({
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
         <p className="text-xs text-zinc-500">
           {marked === 0
-            ? 'Drag across the grid to mark when you are busy.'
-            : `${marked} of ${totalSlots(room)} slots marked busy — ${duration(marked * room.slotMinutes)}. Drag over them again to clear.`}
+            ? 'Drag across the grid to mark when you are free.'
+            : `${marked} of ${totalSlots(room)} slots marked free — ${duration(marked * room.slotMinutes)}. Drag over them again to clear.`}
         </p>
-        <button
-          type="button"
-          onClick={() => onChange(emptyMask(room))}
-          disabled={marked === 0}
-          className="rounded-xl bg-zinc-100 px-3 py-1.5 text-xs font-medium enabled:hover:bg-zinc-200 disabled:opacity-40 dark:bg-zinc-800 dark:enabled:hover:bg-zinc-700"
-        >
-          Clear all
-        </button>
+        {/* Three one-shot actions rather than a busy/free mode. A mode would
+            give every label, colour and count in this flow a second version to
+            keep in step, and the two versions would drift somewhere no test can
+            see. "Invert" covers the person who would rather think in busy time:
+            paint what is taken, then flip once. See PLAN.md section 14. */}
+        <div className="flex flex-wrap gap-2">
+          <PainterAction
+            onClick={() => onChange(fullMask(room))}
+            disabled={marked === totalSlots(room)}
+          >
+            Select all
+          </PainterAction>
+          <PainterAction onClick={() => onChange(invertMask(mask))}>
+            Invert
+          </PainterAction>
+          <PainterAction
+            onClick={() => onChange(emptyMask(room))}
+            disabled={marked === 0}
+          >
+            Clear all
+          </PainterAction>
+        </div>
       </div>
 
       {blocks.length > 0 && (
@@ -137,6 +160,28 @@ export default function ManualPainter({
         </ul>
       )}
     </div>
+  )
+}
+
+/** `min-h-9` below `sm` for the same reason the other small controls carry it. */
+function PainterAction({
+  onClick,
+  disabled = false,
+  children,
+}: {
+  onClick: () => void
+  disabled?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex min-h-9 items-center rounded-xl bg-zinc-100 px-3 py-1.5 text-xs font-medium enabled:hover:bg-zinc-200 disabled:opacity-40 sm:min-h-0 dark:bg-zinc-800 dark:enabled:hover:bg-zinc-700"
+    >
+      {children}
+    </button>
   )
 }
 

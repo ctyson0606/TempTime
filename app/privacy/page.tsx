@@ -21,7 +21,7 @@ export const metadata: Metadata = {
  * 8.2 can be requested.
  */
 
-const UPDATED = '2026-08-02'
+const UPDATED = '2026-08-05'
 
 export default function PrivacyPage() {
   return (
@@ -53,10 +53,18 @@ export default function PrivacyPage() {
 
       <Section title="Only a string of 0s and 1s leaves your browser">
         <p>
-          This is the whole design. When you import a calendar file, it is read{' '}
-          <em>in your browser</em>. You see the events, you untick the ones you do not
-          want to count, and what gets sent is a row of 0s and 1s — one digit per
-          half-hour slot in the room, 1 meaning busy.
+          This is the whole design. You mark the times you are free. When you import a
+          calendar file, it is read <em>in your browser</em>: you see the events, you
+          untick any that should not count, and the ticked ones are subtracted from what
+          you marked. What gets sent is a row of 0s and 1s — one digit per half-hour
+          slot in the room, 1 meaning not available.
+        </p>
+        <p>
+          Marking free time rather than busy time means less about you leaves at all.
+          The two are opposites of each other, so in principle they carry the same
+          information — but in practice nobody paints the whole opposite. You mark the
+          few windows that suit you, and everything else is sent as unavailable without
+          ever saying why.
         </p>
         <p>
           The event names, their real start and end times, how many events there were,
@@ -160,9 +168,10 @@ export default function PrivacyPage() {
           are not connected yet — today the only ways in are painting by hand and
           importing a file. When they arrive, they will follow the same rule as
           everything above: the connection asks only for when you are busy, never for
-          what you are doing, you will still untick anything you do not want counted,
-          and only the 0/1 string will be sent. This page will be updated before any of
-          it is switched on.
+          what you are doing, and what comes back can only be subtracted from the time
+          you marked — a connected calendar never offers anything on your behalf. You
+          will still untick anything you do not want counted, and only the 0/1 string
+          will be sent. This page will be updated before any of it is switched on.
         </p>
       </Section>
 

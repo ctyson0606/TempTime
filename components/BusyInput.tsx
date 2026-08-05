@@ -5,8 +5,8 @@ import {
   type RoomGrid,
   blocksToMask,
   slotRange,
+  subtractMask,
   totalSlots,
-  unionMasks,
 } from '@/lib/slots'
 import { clearImport, loadImport, saveImport } from '@/lib/importCache'
 import { type IcsSkipped, parseIcs } from '@/lib/providers/ics'
@@ -26,13 +26,19 @@ interface BusyInputProps {
 }
 
 /**
- * Steps one and two of the room flow: where your busy time comes from, and which
- * of it you are willing to share.
+ * Steps one and two of the room flow: the time you are offering, and what your
+ * calendar takes back out of it.
  *
  * Imported events never go straight onto the grid. They sit in the checklist
- * first, shown on the grid as a lighter shade, and only what is still ticked is
- * merged in — the whole point being that declining an event happens before
+ * first, drawn on the grid in the removal colour, and only what is still ticked
+ * is applied — the whole point being that declining an event happens before
  * anything is committed, not after.
+ *
+ * An import can only *subtract*. Turning fetched events into free time would
+ * announce an availability nobody claimed: an hour with nothing on the calendar
+ * is not an hour someone is free, and treating it as one is how a person ends up
+ * invited to something they cannot attend. Whoever does want "all of it except
+ * my calendar" has a Select all button one line below, and presses it himself.
  */
 export default function BusyInput({
   room,
@@ -53,7 +59,7 @@ export default function BusyInput({
   const [hint, setHint] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
-  /** What the ticked events would add, drawn on the grid before it is committed. */
+  /** What the ticked events would remove, drawn on the grid before it is committed. */
   const pending = useMemo(() => {
     if (imported === null) return null
     const ticked = imported.filter((block) => selected.has(block.id))
@@ -66,7 +72,7 @@ export default function BusyInput({
       fileInput.current?.click()
       return
     }
-    setHint('Drag across the grid below to mark when you are busy.')
+    setHint('Drag across the grid below to mark when you are free.')
   }
 
   const read = async (file: File) => {
@@ -126,10 +132,12 @@ export default function BusyInput({
   }
 
   const apply = () => {
-    if (pending !== null) onChange(unionMasks(mask, pending))
+    if (pending !== null) onChange(subtractMask(mask, pending))
     const count = selected.size
     remember(null, new Set())
-    setNotice(`Added ${count} ${count === 1 ? 'event' : 'events'} to the grid.`)
+    setNotice(
+      `Took ${count} ${count === 1 ? 'event' : 'events'} out of your free time.`,
+    )
   }
 
   return (

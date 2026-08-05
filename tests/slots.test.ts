@@ -4,16 +4,19 @@ import {
   type RoomGrid,
   blocksToMask,
   emptyMask,
+  fullMask,
+  invertMask,
   isValidMask,
   roomExpiresAt,
   slotDate,
   slotRange,
   slotStart,
   slotsPerDay,
+  subtractMask,
   timeToSlot,
   totalSlots,
-  unionMasks,
 } from '../lib/slots'
+import { paintBlock } from '../lib/providers/manual'
 
 /** Two consecutive days plus one three weeks later — the gap is the point. */
 const room: RoomGrid = {
@@ -228,17 +231,45 @@ describe('roomExpiresAt', () => {
   })
 })
 
-describe('unionMasks', () => {
-  it('is busy where either side is busy', () => {
-    expect(unionMasks('0011', '0101')).toBe('0111')
+describe('invertMask', () => {
+  it('flips every slot', () => {
+    expect(invertMask('0011')).toBe('1100')
   })
 
-  it('leaves a mask alone when merged with an empty one', () => {
-    const mask = '1'.repeat(96)
-    expect(unionMasks(mask, emptyMask(room))).toBe(mask)
+  it('turns an empty grid into a full one and back', () => {
+    expect(invertMask(emptyMask(room))).toBe(fullMask(room))
+    expect(invertMask(fullMask(room))).toBe(emptyMask(room))
+  })
+
+  it('is its own inverse, which is what makes the round trip lossless', () => {
+    const painted = paintBlock(room, emptyMask(room), 4, 9, '1')
+    expect(invertMask(invertMask(painted))).toBe(painted)
+  })
+})
+
+describe('subtractMask', () => {
+  it('keeps what is set on the left and not on the right', () => {
+    expect(subtractMask('1110', '0110')).toBe('1000')
+  })
+
+  it('never adds a slot the left side did not have', () => {
+    // The property the import depends on: a calendar can take time away from
+    // what someone offered, never hand any back.
+    const offered = paintBlock(room, emptyMask(room), 4, 9, '1')
+    const events = paintBlock(room, emptyMask(room), 20, 30, '1')
+    const left = subtractMask(offered, events)
+    for (let i = 0; i < left.length; i++) {
+      if (left[i] === '1') expect(offered[i]).toBe('1')
+    }
+    expect(left).toBe(offered)
+  })
+
+  it('leaves nothing when everything offered is taken', () => {
+    const offered = paintBlock(room, emptyMask(room), 4, 9, '1')
+    expect(subtractMask(offered, fullMask(room))).toBe(emptyMask(room))
   })
 
   it('refuses masks of different lengths', () => {
-    expect(() => unionMasks('000', '0000')).toThrow(RangeError)
+    expect(() => subtractMask('000', '0000')).toThrow(RangeError)
   })
 })

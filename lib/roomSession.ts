@@ -14,7 +14,16 @@
  * always a primitive and React's identity comparison settles.
  */
 
-type Kind = 'token' | 'participant' | 'owner' | 'name' | 'draft'
+type Kind = 'token' | 'participant' | 'owner' | 'name' | 'free'
+
+/**
+ * Drafts written before the grid meant free time. A mask stored under the old
+ * key holds busy time, so reading it as a draft now would show every free hour
+ * as taken and every taken hour as free — silently, and only for people who had
+ * a draft in flight. The key changed rather than migrating the value: a draft is
+ * cheap to lose and impossible to verify.
+ */
+const LEGACY_DRAFT: string = 'draft'
 
 const key = (kind: Kind, code: string) => `temptime:${kind}:${code}`
 
@@ -41,13 +50,14 @@ export const readOwnerSecret = (code: string) => read('owner', code)
 export const readDisplayName = (code: string) => read('name', code)
 
 /**
- * The mask being painted, before it is submitted.
+ * The free-time mask being painted, before it is submitted.
  *
  * Kept separate from the submitted one because they are different things: this
  * is a draft that survives a reload, and `POST /submit` is the moment it becomes
- * something other people's results depend on.
+ * something other people's results depend on. Stored the way the grid reads it —
+ * `'1'` means free — and inverted only on the way to the API.
  */
-export const readDraftMask = (code: string) => read('draft', code)
+export const readDraftMask = (code: string) => read('free', code)
 
 export function saveMembership(
   code: string,
@@ -65,7 +75,7 @@ export function saveOwnerSecret(code: string, secret: string): void {
 }
 
 export function saveDraftMask(code: string, mask: string): void {
-  localStorage.setItem(key('draft', code), mask)
+  localStorage.setItem(key('free', code), mask)
   changed()
 }
 
@@ -75,8 +85,11 @@ export function saveDraftMask(code: string, mask: string): void {
  * request carries a credential that can only fail.
  */
 export function forgetRoom(code: string): void {
-  for (const kind of ['token', 'participant', 'owner', 'name', 'draft'] as const) {
+  for (const kind of ['token', 'participant', 'owner', 'name', 'free'] as const) {
     localStorage.removeItem(key(kind, code))
   }
+  // Swept here as well, so a browser that held a pre-flip draft does not carry
+  // it around for the three months a room can live.
+  localStorage.removeItem(`temptime:${LEGACY_DRAFT}:${code}`)
   changed()
 }

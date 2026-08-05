@@ -189,19 +189,41 @@ export function isValidMask(room: RoomGrid, mask: string): boolean {
   return mask.length === totalSlots(room) && /^[01]*$/.test(mask)
 }
 
+export function fullMask(room: RoomGrid): string {
+  return '1'.repeat(totalSlots(room))
+}
+
 /**
- * Busy in either mask is busy in the result.
+ * The complement, which is the only conversion between what someone paints and
+ * what gets stored.
  *
- * Sources add to each other rather than replace: importing a calendar after
- * painting by hand keeps both, which is what someone who did both meant.
+ * The grid takes free time and `submissions.busy_mask` holds busy time, so one
+ * of the two has to be flipped. Doing it in exactly two places — just before a
+ * submission leaves, and just after one comes back — is what keeps a single
+ * meaning in the database; see PLAN.md section 3.4 on why two meanings there
+ * would be the expensive mistake.
  */
-export function unionMasks(a: string, b: string): string {
+export function invertMask(mask: string): string {
+  let flipped = ''
+  for (const cell of mask) flipped += cell === '1' ? '0' : '1'
+  return flipped
+}
+
+/**
+ * Everything set in `a` that is not set in `b`.
+ *
+ * This is how an import lands: the calendar can only take time away from what
+ * someone offered, never add to it. Adding would assert an availability nobody
+ * claimed — an empty hour on a calendar is not the same as a free one, which is
+ * the over-reporting the old busy-first model was built on (PLAN.md section 10).
+ */
+export function subtractMask(a: string, b: string): string {
   if (a.length !== b.length) {
-    throw new RangeError(`cannot union masks of ${a.length} and ${b.length} slots`)
+    throw new RangeError(`cannot subtract masks of ${b.length} from ${a.length} slots`)
   }
-  let merged = ''
+  let left = ''
   for (let i = 0; i < a.length; i++) {
-    merged += a[i] === '1' || b[i] === '1' ? '1' : '0'
+    left += a[i] === '1' && b[i] !== '1' ? '1' : '0'
   }
-  return merged
+  return left
 }

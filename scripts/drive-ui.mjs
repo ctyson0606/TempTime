@@ -111,7 +111,16 @@ try {
   // Scoped to the painter: the page draws a second grid for the heatmap, and
   // both fill their cells with data-slot. An unscoped [data-slot="4"] matches
   // two elements and Playwright refuses to guess which.
-  const painter = b.getByRole('group', { name: 'Your busy times' })
+  const painter = b.getByRole('group', { name: 'Your free times' })
+
+  // The empty grid now means "free at no point", which is destructive rather
+  // than merely useless, so it cannot be sent. Asserted before anything is
+  // painted, which is the only moment it is true.
+  report(
+    await b.getByRole('button', { name: 'Send my times' }).isDisabled(),
+    'an empty selection cannot be sent',
+  )
+
   const from = await painter.locator('[data-slot="4"]').boundingBox()
   const to = await painter.locator('[data-slot="8"]').boundingBox()
   await b.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
@@ -119,17 +128,34 @@ try {
   await b.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 })
   await b.mouse.up()
 
-  // Busy cells carry the painter's fill class; they are plain divs with no
+  // Free cells carry the painter's fill class; they are plain divs with no
   // pressed state, so counting the class is the only thing that reflects them.
-  const busyCells = () =>
+  const freeCells = () =>
     painter
       .locator('[data-slot]')
       .evaluateAll(
         (cells) => cells.filter((c) => c.className.includes('bg-indigo-500')).length,
       )
 
-  const painted = await busyCells()
+  const painted = await freeCells()
   report(painted > 0, 'dragging marks slots on the grid', `${painted} cells`)
+
+  // Invert is what replaces a busy/free mode, so it has to be arithmetic rather
+  // than "something changed": every slot flips, and twice is a no-op.
+  const gridCells = await painter.locator('[data-slot]').count()
+  await b.getByRole('button', { name: 'Invert' }).click()
+  const inverted = await freeCells()
+  report(
+    inverted === gridCells - painted,
+    'invert flips every slot rather than some of them',
+    `${inverted} = ${gridCells} - ${painted}`,
+  )
+  await b.getByRole('button', { name: 'Invert' }).click()
+  report(
+    (await freeCells()) === painted,
+    'and inverting twice puts the selection back',
+    `${painted} cells`,
+  )
 
   report(
     await b.getByText('Not sent yet').isVisible(),
@@ -141,17 +167,25 @@ try {
 
   // The real test of my-submission: wipe the draft, reload, and see whether
   // what comes back is what the server was told.
-  await b.evaluate(() => {
-    for (const k of Object.keys(localStorage)) {
-      if (k.startsWith('temptime:draft:')) localStorage.removeItem(k)
-    }
+  const cleared = await b.evaluate(() => {
+    const keys = Object.keys(localStorage).filter((k) => k.startsWith('temptime:free:'))
+    for (const k of keys) localStorage.removeItem(k)
+    return keys.length
   })
+  // If the key is ever renamed again, this assertion is what stops the restore
+  // check below from passing on a draft that was never cleared.
+  report(
+    cleared > 0,
+    'the local draft was actually there to clear',
+    `${cleared} key(s)`,
+  )
+
   await b.reload()
   await b.waitForSelector('text=Send again', { timeout: 15000 })
-  const restored = await busyCells()
+  const restored = await freeCells()
   report(
     restored > 0 && restored === painted,
-    'the sent mask comes back after the local draft is cleared',
+    'the sent mask comes back as free time after the local draft is cleared',
     `${restored} of ${painted}`,
   )
 
