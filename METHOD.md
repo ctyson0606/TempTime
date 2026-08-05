@@ -110,6 +110,27 @@ the shape every equality check takes when the thing being measured never
 appeared. Anchor on a value known to be non-empty (`restored > 0 && restored ===
 painted`) so that finding nothing fails instead of agreeing with itself.
 
+**Instrumentation has the same requirement, and it is easier to get wrong there
+because nobody sabotages a debug log.** Chasing why a tap left a readout blank,
+the first probe recorded every *change* of the state behind it. It could not
+distinguish "the handler never ran" from "the handler ran and computed the same
+value it already held", because a write of the value already present is not a
+change. Both hypotheses produced an identical empty log, and the empty log was
+read as evidence for the wrong one. Log the call, not only the transition.
+
+**An intermittent failure has a rate, and one run does not measure it.** A probe
+that failed, then passed once a candidate fix was in, was very nearly written
+down as fixed; four more runs put it back at roughly one failure in two, with the
+"fix" still in place and irrelevant. Anything that does not fail every time needs
+a count before and after — three or four runs each — and the comparison is
+between rates, not between outcomes.
+
+The other half of that rule: **an added probe is part of the experiment.** The
+same failure disappeared whenever the instrumentation for diagnosing it was
+present, because each extra round trip into the page changed the timing. Compare
+runs whose instrumentation is identical, and be suspicious of a bug that only
+survives when nobody is looking at it.
+
 **A failure that stops after a change is not a failure the change fixed.** Put
 the suspected cause back and confirm the failure returns. Skipping that step
 costs more than the time it saves, because what gets written down is a diagnosis
@@ -329,6 +350,22 @@ Update semantics:
   `'strict-dynamic'`, a hosted analytics or monitoring snippet is a CSP decision
   rather than a checkbox — and the host's dashboard will show it enabled while
   the browser silently refuses to run it.
+- **When the interface and the store disagree about polarity, convert at one
+  boundary.** A grid that collects free time and a column that holds busy time
+  are complements, so either could be the stored one; what cannot happen is both
+  meanings living in the same table, because then every read needs a second field
+  telling it how to interpret the first, and every reader has to remember to
+  check. Pick the meaning the schema, the constraints and the existing tests
+  already use, convert immediately before writing and immediately after reading,
+  and say in the module where those two places are.
+- **Fetched data is evidence about itself, not about its complement.** A
+  calendar's events are the hours that are taken; the gaps between them are not
+  hours anyone is available — they hold sleep, travel, family, and everything
+  nobody bothered to write down. Turning fetched busy time into offered free time
+  announces a commitment the person never made, and the error lands on the
+  expensive side: someone gets invited to a slot they cannot make. An import may
+  subtract from what a person stated, never add to it. Where the old behaviour is
+  genuinely wanted, give them one button that states it themselves.
 - **Put the compute next to the hop that is paid per query.** A visitor pays the
   distance to the application once per request; the application pays the
   distance to the database once per *query*, and a route rarely makes only one.
@@ -356,6 +393,12 @@ Update semantics:
 
 ## Anti-Patterns
 
+- **Adding a mode where a one-shot action would do.** Offering "paint busy" and
+  "paint free" as a setting was rejected: a mode gives every label, colour, count
+  and help sentence in that flow a second version to keep in step, and the two
+  drift somewhere no test can see, because both versions render *something*. A
+  single "Invert" button serves the same person — paint it the way you think
+  about it, then flip once — and leaves one vocabulary to maintain.
 - **Duplicating memory into a second store.** These two files are the single
   source of truth; a parallel copy elsewhere drifts and creates contradictions.
 - **Logging progress into `METHOD.md`.** It turns a rulebook into a diary and

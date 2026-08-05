@@ -1,7 +1,7 @@
 # STATE
 
-> Last updated: 2026-08-05 (deployed, verified against the deployment, and
-> `PLAN.md` §12 run with a real second person)
+> Last updated: 2026-08-05 (deployed and verified; `PLAN.md` §12 run with a real
+> second person; then the grid flipped from busy time to free time)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -28,9 +28,17 @@ fallback, within a second or two. That is the last step in the spec that had
 never been executed.
 
 So the whole of what was planned is built, deployed and seen working by someone
-other than its author. The next body of work is the second-stage connectors,
-which publishing unblocked — Google's OAuth review needs a reachable privacy
-page, and there now is one.
+other than its author.
+
+**Then the product changed.** The grid now collects the time someone *is* free
+rather than the time they are busy, and an import can only subtract from it. That
+work is finished and verified locally but is **not committed and not deployed**,
+so the live site is currently a version behind. Everything about it is in the
+Recent Decisions below and in `PLAN.md` §3.4, §10 and §14.
+
+After that lands, the next body of work is the second-stage connectors, which
+publishing unblocked — Google's OAuth review needs a reachable privacy page, and
+there now is one.
 
 ---
 
@@ -135,12 +143,23 @@ page, and there now is one.
   polling fallback — and it felt like a second or two. Observed by the user, not
   instrumented; there is still no measured production figure (see Open
   Questions).
+- The grid collects free time. The browser holds a free-time mask; `invertMask`
+  converts it to `busy_mask` immediately before a submission leaves and
+  immediately after `my-submission` comes back, and nothing else in the system
+  changed meaning — schema, constraints, RLS, API contract, `lib/aggregate.ts`
+  and the three `verify-*.mjs` scripts were all swept and are untouched.
+  `subtractMask` is how an import lands. `ManualPainter` carries Select all,
+  Invert and Clear all; there is no busy/free mode. The draft key moved from
+  `temptime:draft:` to `temptime:free:` so a pre-flip draft cannot be read
+  inverted.
 - Milestone coverage: `PLAN.md` §11 holds the per-item state; do not duplicate it
   here. M1 through M4 are all complete, acceptance tests included.
 
 **In Progress**
-- Nothing is half-built. The next work is the second-stage connectors, and it
-  starts with a decision rather than code (see Next Steps).
+- The free-time flip is written and verified but **not committed**: 236 unit
+  tests, `drive-ui.mjs` at 25/25 against a dev server, and two sabotages that
+  both failed the right things. It has never run against the deployment, because
+  it has not been pushed.
 
 **Blocked**
 - Nothing waits on an outside decision. Vercel's own first cron firing is a
@@ -152,16 +171,20 @@ page, and there now is one.
 
 ## Next Steps
 
-1. Apply for the slow OAuth access now, before writing any of it. Google's
+1. Commit and push the free-time flip, then re-run the three browser scripts
+   against the deployment. Until that happens the live site and this repository
+   disagree about what the grid means, which is the one difference nobody looking
+   at either can see.
+2. Apply for the slow OAuth access now, before writing any of it. Google's
    sensitive-scope review and TickTick's API application are queues measured in
    weeks of somebody else's time, and Google's precondition — a reachable
    privacy page — is satisfied as of 2026-08-05. Applying first turns the wait
    into the development window instead of a gap after it.
-2. From 2026-08-06, check Vercel's Cron tab once. The route is proven; what is
+3. From 2026-08-06, check Vercel's Cron tab once. The route is proven; what is
    not is that the scheduler sends `Authorization: Bearer $CRON_SECRET` as
    documented. A silent 401 there looks like nothing at all, and `pg_cron` would
    keep hiding it.
-3. Then the second-stage connectors, in the order `PLAN.md` §8.2 argues for:
+4. Then the second-stage connectors, in the order `PLAN.md` §8.2 argues for:
    Todoist first because it needs nothing but OAuth, Google next because its
    sensitive-scope review is a queue rather than a build, TickTick last because
    its API application has no predictable timeline. Apply for the slow ones early
@@ -182,6 +205,19 @@ page, and there now is one.
   proposed. Worth remembering rather than chasing: if it returns, this is the
   paragraph that says it has happened before, and the polling fallback is what
   keeps the room working while it is diagnosed.
+- **Why does the heatmap's tap handler not run about half the time?**
+  `scripts/drive-mobile.mjs` fails its readout assertion on roughly one run in
+  two, in a production build as well as in development, and the feature files
+  (`Heatmap.tsx`, `SlotGrid.tsx`) are byte-identical to the version that passed
+  on 2026-08-02 — this is not a consequence of the free-time flip. What was
+  established: the tap coordinate is the same on passing and failing runs, the
+  cell under it is the right one, and a native `pointerdown` listener sees the
+  event arrive on that cell — while `Heatmap`'s own `onPointerDown` is never
+  called at all. Ruled out: a stale coordinate (the box is sampled until it stops
+  moving), the `pointerleave` clear path (removing it changes nothing), and a
+  zero-length tap (60ms behaves the same). Do **not** make the probe wait longer:
+  there is no handler run to wait for. The feature works when it works, and a
+  real finger has never been observed to miss.
 - **What is the live-update latency in production?** No measured figure exists,
   though the target is no longer unsupported: on 2026-08-05 a second person on
   their own machine saw an answer arrive on the socket within a perceived second
@@ -223,6 +259,41 @@ page, and there now is one.
 
 ## Recent Decisions
 
+- **2026-08-05 — The grid collects free time, not busy time.** Three reasons, in
+  the order they carry weight: people answer "when are you free" accurately and
+  "when are you busy" approximately; an hour with nothing on the calendar is not
+  an hour someone is available, so the old model systematically over-reported
+  availability in the expensive direction; and painting free time sends *less*,
+  because nobody paints the whole complement — you mark the few windows that suit
+  you and the rest goes out as unavailable without saying why. The manual path is
+  now deliberately the same gesture as When2meet; the difference the product
+  sells is that a calendar can carve time back out of it.
+- **2026-08-05 — Storage keeps busy semantics; the conversion lives at the
+  browser edge.** `busy_mask`, its check constraint, the API contract and every
+  script and test already speak busy, and the complement is lossless, so flipping
+  the stored meaning would buy nothing and cost a sweep. The column is not
+  renamed for the same reason: it describes what is stored, and what is stored
+  did not change. See `PLAN.md` §3.4, and METHOD.md → Conventions for the general
+  rule about polarity.
+- **2026-08-05 — An import subtracts and never adds.** Turning fetched events
+  into free time would assert an availability nobody claimed. The cost is that
+  "import only, paint nothing" now yields an empty answer, which is what the
+  Select all button is for — the person states "all of it except my calendar"
+  themselves rather than having it assumed. METHOD.md → Conventions carries the
+  general form.
+- **2026-08-05 — No busy/free mode; Select all, Invert and Clear all instead.**
+  A mode doubles every label, colour and count in the flow and the two copies
+  drift where no test can see, because both render something. Invert serves the
+  person who thinks in busy time at the cost of one button. In METHOD.md →
+  Anti-Patterns.
+- **2026-08-05 — An empty selection cannot be sent, reversing the old rule
+  deliberately.** An all-zero *busy* mask meant "free the whole time", a real
+  answer that was knowingly allowed. Inverted, the same empty grid means "free at
+  no point", which counts towards `submittedCount` and makes "everyone is free"
+  impossible in every slot — it flattens the room into the `PLAN.md` §3.5
+  fallback. Not sending says the same thing more accurately, because the member
+  list then shows the person as still to answer. The draft key also moved to
+  `temptime:free:` so a mask painted before the flip cannot be read inverted.
 - **2026-08-05 — Vercel, with the functions in Tokyo `hnd1`.** Hong Kong `hkg1`
   was the live alternative and was rejected on arithmetic: it would save a
   visitor roughly 20ms once per request and cost roughly 50ms on *every* query
