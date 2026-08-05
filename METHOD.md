@@ -64,6 +64,33 @@ then revert and re-run.
 
 This is cheap and it is the only evidence that a green suite means anything.
 
+**A green suite is evidence only for the code it actually runs.** 221 unit tests
+passed over a component whose two notices were wired the wrong way round: the
+member of a room that had just been deleted was told to check for a typo, and a
+stranger who guessed a code was told a room had been deleted — the one thing the
+404 exists to withhold. Nothing in the unit suite touches that component, and the
+browser script that does cover it had been written in the same session as the bug
+and never run. A probe written and not run is worse than no probe, because its
+presence in the tree reads as evidence to whoever comes next. Run the suite that
+covers what you changed; if none does, that is the finding.
+
+**Some assertions cannot be sabotaged safely, and those stay unproven.** Sabotage
+is cheap where the blast radius is the check itself — refusing a credential,
+dropping a header branch. It is not cheap where the only way to falsify an
+assertion is to destroy live data: the purge suite's control, that a room which
+has not expired survives, can only be broken by removing or inverting the filter
+that decides what gets deleted, and that empties the table on the live database.
+Sabotage what you can, name what you could not, and never let one round of it
+vouch for a whole file.
+
+A sabotage also has to be *aimed*. One meant to test a layout assertion — a
+900px element dropped into the page — broke interaction so thoroughly that the
+run aborted at an unrelated click, several assertions before the one under test.
+That says the suite is fragile, not that the assertion works. Pick a sabotage
+whose blast radius is the assertion you are testing, move it somewhere with
+fewer neighbours if it is not, and treat "the run died first" as a result that
+has not answered the question.
+
 **A probe whose outcomes cannot differ proves nothing.** Confirming a credential
 by watching a request fail says only that something failed. Two rounds were lost
 this way: a JWT secret was tested against an endpoint that rejects every
@@ -97,6 +124,24 @@ nothing to do with the failure, which remains unexplained. The comments had to b
 rewritten to say so. Note the asymmetry — sabotaging the *code* proves a test has
 power, and sabotaging your own *fix* proves the diagnosis does.
 
+**Sabotage also finds lines that do nothing.** A comment saying "without this the
+page does not hydrate" is a testable prediction, so test it. One such line —
+copied from the framework's own documentation, and explained in a comment as
+load-bearing — was commented out and changed nothing: Next 16.2.11 reads a CSP
+nonce from the *response* header, not the request header the docs name. The line
+was kept, because documented behaviour is a better bet across upgrades than an
+undocumented path, but the comment now records both observations instead of
+asserting the one that turned out to be false. Every "this is required" written
+into a comment costs one build to check and is worth exactly that.
+
+The same applies to setup documentation, where being wrong is more expensive
+because the reader has no working system to check it against. `.env.example`
+told anyone setting the project up that one variable could be left empty and
+Realtime would degrade to polling. Emptying it and calling the endpoint returned
+500: the value signs the token issued at join, so nothing works without it, and
+restoring it took the same request back to 200. A sentence describing what
+happens when a value is missing is verified by removing the value.
+
 **A production number is not asserted from a machine that is not production.**
 Where a target describes deployed behaviour — a latency, a throughput — measure
 it and print it, but do not fail a local run against it, and say in the spec why.
@@ -107,21 +152,40 @@ reason to stop asserting something.
 **UI is verified by driving it, not by reading it.** A component that type-checks
 and builds has been proven to compile, nothing more. Drive the running app in a
 real browser, assert on what the DOM actually says — computed styles, element
-counts, the text a user would read — and screenshot it to look at. Four traps
+counts, the text a user would read — and screenshot it to look at. Six traps
 found this way: a screenshot taken immediately after a click captures CSS
 transitions mid-flight and looks broken when it is not, so settle before
 capturing; a probe that finds nothing is usually a wrong selector rather than a
 real absence, so make it assert something known-present first; anything fetched
 after the page loads is a round trip behind it, so wait for the text that proves
-the data arrived rather than for the page; and an element below the fold has real
+the data arrived rather than for the page; an element below the fold has real
 coordinates that are off-screen, so scroll it into view before sending a pointer
-anywhere near it.
+anywhere near it; an unscoped text match finds whichever element happens to
+contain the words, so scope it to the one under test — a readout assertion
+matched the *heading* above it, which contained the same phrase, and would have
+passed had the readout never rendered at all; and a coordinate measured on a page
+that updates itself is stale by the time it is used, so wait for the page to
+settle and then ask what is actually under the point before dispatching to it.
+
+That last one is the one that bites hardest, because it does not fail every time.
+A room page whose badge and member list fill in asynchronously shifts everything
+below them; a probe that measured a cell, then touched those coordinates a moment
+later, passed twice and failed once with the feature working perfectly
+throughout. An intermittent assertion is worse than a failing one — it gets
+re-run until it passes. Fix the timing, do not retry the probe.
 
 Assert the shape of the answer, not its presence. "Some cells are coloured" is
 satisfied by a scale that renders one colour everywhere; grouping the cells by
 computed colour and requiring the group sizes to come out `49,10,5` is an
 assertion about the arithmetic behind the picture. Any probe that would pass on a
 plausibly broken render is measuring the wrong thing.
+
+Where an assertion needs a threshold, prefer one the codebase can defend over one
+borrowed from a guideline. "No control is a smaller tap target than the primary
+buttons already are" is a rule this design can be held to and can argue about;
+"44 points, because Apple says so" invites a redesign of every control that has
+never bothered anyone, and is the kind of number that gets loosened the first
+time it is inconvenient.
 
 ### Spec changes
 
@@ -242,6 +306,23 @@ Update semantics:
   token resolves to, and a subscription that connects and stays silent looks
   exactly like a quiet room. The same gap exists for any queue, webhook or
   stream. Assert that something arrived, never that something connected.
+- **A per-request value stamped into rendered HTML rules out prerendering that
+  page.** A CSP nonce is minted per response; a prerendered page keeps whatever
+  it was built with, and nothing in a framework's response cache knows the
+  difference. What you get is a 200 that never hydrates, because the page's own
+  bootstrap is blocked by our own header — a symptom that looks nothing like a
+  caching problem and is invisible to every check short of driving a browser.
+  Either render per request or keep per-request values out of the output; there
+  is no third option. Decide which before writing the header, because the answer
+  is a rendering-strategy change, not a header tweak.
+- **A tap is not a small hover.** A finger that lands without travelling fires
+  `pointerdown` and `pointerup` and *no* `pointermove` at all, so anything
+  driven off movement alone simply does not exist on a phone — a readout that
+  was the only place the numbers behind a colour were written down stayed on its
+  placeholder text forever. Touch also fires `pointerleave` immediately after
+  `pointerup`, so clearing state there blanks whatever the tap just set: gate the
+  clear on `pointerType === 'mouse'`. Any hover-driven affordance needs a tap
+  path, and the wording needs to name both.
 - **Caller errors return, configuration errors throw.** A bad credential or
   malformed input is the caller's problem: return `null` or a typed result the
   route maps to a status code, without revealing which check failed. A missing or
@@ -345,6 +426,15 @@ Update semantics:
   the process down while the driver's handles are still closing and libuv aborts
   on Windows, so a run where every assertion passed reports a crash and a
   non-zero status. Set `process.exitCode` and let Node exit on its own.
+- **A suite that freezes the clock but lets one call reach the real one.** Two
+  assertions in the calendar suite called the helper without the frozen `now`
+  the rest of the file passes everywhere, so they read the system date and
+  asserted values true only during one particular month. They passed for eight
+  days and then failed on a day nobody had touched them — noise that arrives
+  attached to whatever change happens to be in flight, and reads as that
+  change's fault. A default parameter falling back to `new Date()` is what hides
+  the omission: if a suite freezes time, every call in it takes the frozen
+  value, and the ones that look like they do not need it are the ones to check.
 - **PowerShell here-strings (`@'...'@`) in the Bash tool.** Bash does not parse
   them; the `@` characters end up inside the string. This silently corrupted a
   commit message. Two shells are available in this environment and each needs its

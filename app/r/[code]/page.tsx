@@ -17,7 +17,7 @@ export default async function RoomPage({
     <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10">
       <Link
         href="/"
-        className="mx-auto mb-6 block w-full max-w-2xl text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+        className="mx-auto mb-6 flex min-h-9 w-full max-w-2xl items-center text-sm text-zinc-500 hover:text-zinc-800 sm:min-h-0 dark:hover:text-zinc-200"
       >
         ← TempTime
       </Link>

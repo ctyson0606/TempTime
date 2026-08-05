@@ -1,6 +1,7 @@
 # STATE
 
-> Last updated: 2026-07-26 (realtime)
+> Last updated: 2026-08-02 (M4 finished: headers, the mobile pass, the privacy
+> page and the README)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -10,15 +11,17 @@ archived — git holds the history. For durable rules and workflow, see
 
 ## Current Focus
 
-**M3 is closed.** A room shows the overlay of everyone's answers, the ranked
-windows to meet, and who has answered — and somebody else's answer now arrives on
-its own, over a Realtime subscription, with a polling fallback that has been
-verified separately by cutting the socket. All of it was driven in two browser
-contexts, not merely compiled.
+**M4 is finished, and with it every milestone in `PLAN.md` §11.** The security
+headers, the mobile pass, the privacy page and the README are all in and all
+driven rather than read. Nothing on the milestone list is outstanding.
 
-What is left is **M4**: the purge route, the CSP header, and the rest of
-`PLAN.md` §11's last list. Nothing about it is blocked, and none of it needs a
-decision that has not been taken.
+The next thing is deploying, and it is no longer one item among several — it is
+the only thing standing between the project and three questions that cannot be
+answered locally: whether two real people in two places can use a room
+(`PLAN.md` §12), what the live-update latency actually is next to the database,
+and whether the coarser cron cadence on a free tier is acceptable. Publishing
+also unlocks the second-stage calendar connectors, since Google's OAuth review
+requires a reachable privacy page and that page now exists.
 
 ---
 
@@ -57,24 +60,63 @@ decision that has not been taken.
   anything, since `SUBSCRIBED` clears the poll timer and the two cannot overlap.
 - `formatSlotWindow` in `lib/room.ts`, shared by the two components that print a
   time range so they cannot disagree about what the end of a day is called.
-- Four scripts that verify against the running system, all development-only
+- `POST` and `GET /api/cron/purge`, the backup destruction path, with its
+  credential in `lib/cronAuth.ts` and `vercel.json` scheduling it. Both verbs run
+  one handler; the secret is read from `x-cron-secret` or a bearer token and both
+  sides are hashed before `timingSafeEqual`, so there is no length check in front
+  of the comparison to answer how long the real secret is.
+- `RoomView` tells four kinds of absence apart and says something different for
+  each: a room that ran out of dates, one deleted by its creator, that same
+  deletion seen by the creator who did it, and a code nothing was ever stored
+  under.
+- Security headers. The one that cannot be constant — the CSP, whose script
+  nonce is minted per response — is built in `lib/csp.ts` and attached in
+  `proxy.ts` (Next 16's name for `middleware.ts`). The rest are in
+  `next.config.ts`, where they also cover static assets and the API: nosniff,
+  `X-Frame-Options`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, COOP,
+  HSTS in production, and `X-Powered-By` switched off. Development relaxes
+  `script-src` and `connect-src` on purpose; production has neither
+  `'unsafe-inline'` nor `'unsafe-eval'`.
+- The mobile pass: nothing scrolls the page sideways at 390px, the seven-day grid
+  overflows its own scroller and reaches its last day, a finger drag paints
+  without scrolling, and no control is a smaller tap target than the primary
+  buttons. Two fixes came out of it — `min-h-9` below `sm` on the three controls
+  that were 20–28px, and a tap path for the heatmap readout.
+- `app/privacy/page.tsx`, linked from a footer in `app/layout.tsx` so every route
+  reaches it. Written against the schema and `lib/rateLimit.ts` rather than from
+  the pitch, so it also states the unflattering parts: IP addresses counted in
+  memory, room titles and display names stored verbatim, and an aggregate of one
+  submitter being that submitter's answer.
+- `README.md`: local setup, the Supabase project's two settings and three
+  migrations, the seven verification scripts, and the deployment compromises.
+- Seven scripts that verify against the running system, all development-only
   because they write to the live database: `scripts/verify-rls.mjs` (the
   repeatable proof of `PLAN.md` §2.2), `scripts/drive-ui.mjs` (the M1
-  acceptance test in two browser contexts), `scripts/verify-heatmap.mjs`
-  (19 assertions over the overlay API, its privacy and its authorisation) and
+  acceptance test in two browser contexts, 21 assertions, now also covering the
+  four absence notices), `scripts/verify-heatmap.mjs`
+  (19 assertions over the overlay API, its privacy and its authorisation),
   `scripts/drive-heatmap.mjs` (the M3 acceptance test, 28 assertions in two
-  contexts, covering both the socket and the fallback). The last three need the
-  dev server — `APP_URL=` for the API probe,
-  `BASE_URL=` for the browser ones — and each creates rooms against a limit of
-  ten an hour, so a handful of runs an hour is the ceiling for all of them
-  together.
-- 203 tests, with `format:check`, `lint` and `typecheck` clean.
+  contexts, covering both the socket and the fallback),
+  `scripts/verify-purge.mjs` (15 assertions over expiry, the credential and the
+  cascade), `scripts/verify-headers.mjs` (22 assertions over the CSP and the
+  security headers) and `scripts/drive-mobile.mjs` (16 assertions in a phone-sized
+  touch context). They need a server running — `APP_URL=` for the API probes,
+  `BASE_URL=` for the browser ones, and `verify-rls.mjs` needs neither because it
+  talks to Supabase directly. `verify-headers.mjs` is the one that needs a
+  **production** build rather than the dev server, since development relaxes the
+  policy; it refuses to run if it sees the development policy at all. All but
+  `verify-purge.mjs` and `verify-rls.mjs` create rooms against a limit of ten an
+  hour, so a handful of runs an hour is the ceiling for those.
+- 232 tests, with `format:check`, `lint` and `typecheck` clean.
 - Milestone coverage: `PLAN.md` §11 holds the per-item state; do not duplicate it
-  here. M1, M2 and M3 are complete, acceptance tests included. M4 has not been
-  started.
+  here. M1 through M4 are all complete, acceptance tests included.
 
 **In Progress**
-- Nothing. The last task closed cleanly.
+- Nothing on the milestone list. The work in flight is deploying, which is a
+  decision (see Open Questions) rather than a task.
+- Three rounds of work are written and verified but **not committed**, at the
+  user's request: the purge route with the four absence notices; the CSP and
+  security headers; and this round's mobile pass, privacy page and README.
 
 **Blocked**
 - Nothing waits on an outside decision any more.
@@ -83,12 +125,17 @@ decision that has not been taken.
 
 ## Next Steps
 
-1. M4, from `PLAN.md` §11: `POST /api/cron/purge` behind `x-cron-secret`, the CSP
-   header, and the remaining hardening. The `pg_cron` schedule already does the
-   purging, so the route is the backup path rather than the primary one.
-2. Deploying, which is what turns three deferred things into answerable ones: the
-   two-browser test with a real friend (`PLAN.md` §12), the coarser cron cadence
-   on a free tier, and the live-update latency target.
+1. Deploy. It is the only remaining step that turns deferred questions into
+   answerable ones: the two-browser test with a real friend (`PLAN.md` §12), the
+   coarser cron cadence on a free tier, and the live-update latency target.
+2. Then the second-stage connectors, in the order `PLAN.md` §8.2 argues for:
+   Todoist first because it needs nothing but OAuth, Google next because its
+   sensitive-scope review is a queue rather than a build, TickTick last because
+   its API application has no predictable timeline. Apply for the slow ones early
+   and write while waiting. One question is unanswered before any of it starts —
+   there is no account system, so where an OAuth refresh token would live has to
+   be decided rather than assumed. Keeping it in the tab, and never on the
+   server, is the answer consistent with `PLAN.md` §2.1.
 
 ---
 
@@ -104,10 +151,13 @@ decision that has not been taken.
   keeps the room working while it is diagnosed.
 - **Where does the app itself run?** Deferrable; development runs locally. Two
   constraints are known. A public URL is a precondition for the two-browser test
-  in `PLAN.md` §12 — a friend cannot reach `localhost`. And Vercel's free tier
-  runs scheduled jobs once a day, not hourly, so the `api/cron/purge` backup is
-  coarser there than `PLAN.md` §4.3 assumes; the `pg_cron` schedule is the
-  primary path and is unaffected. Whatever is chosen should sit in Tokyo, to
+  in `PLAN.md` §12 — a friend cannot reach `localhost`. And Vercel's Hobby plan
+  will not deploy a cron expression that runs more than once a day, so the
+  `api/cron/purge` backup is coarser there than `PLAN.md` §4.3 assumes; the
+  `pg_cron` schedule is the primary path and is unaffected. `vercel.json` now
+  exists and encodes that daily schedule, which leans towards Vercel without
+  settling it — it is one file to delete if somewhere else wins. Whatever is
+  chosen should sit in Tokyo, to
   match the database — and that is also what makes the live-update target
   measurable, since one of the two round trips an update costs is the
   app-to-database hop.
@@ -138,6 +188,99 @@ decision that has not been taken.
 
 ## Recent Decisions
 
+- **2026-08-02 — The tap-target floor is 36px, taken from the design rather than
+  from a platform guideline.** Apple's 44pt would have forced a redesign of
+  controls nobody has complained about; "no control is a smaller target than the
+  primary buttons already are" is a rule this codebase can defend. Three
+  controls were below it — the grid-size picker at 24px, the source picker at
+  28px, the room's back link at 20px — and all three got `min-h-9` below `sm`
+  only, so desktop density is untouched. The general form is in METHOD.md →
+  Verification.
+- **2026-08-02 — The heatmap readout is driven by `pointerdown`, not only
+  `pointermove`.** On a phone the line never left its placeholder: a tap that
+  does not travel fires no `pointermove` at all, and the readout is the only
+  place the counts behind a colour are written down. `pointerleave` now clears
+  only for a mouse, because touch fires it immediately after `pointerup` and
+  would blank what the tap had just set. Wording changed to "Tap or hover".
+- **2026-08-02 — `scripts/drive-mobile.mjs` is kept, and dispatches touch through
+  CDP rather than `page.mouse`.** Whether a drag on the grid paints or scrolls
+  the page is decided by `touch-action`, which a mouse never consults, and a
+  synthetic `PointerEvent` arrives after the browser has already decided what the
+  gesture meant. It builds its room at the full seven days because that is the
+  width the layout is worst at. Re-run it after touching `SlotGrid`, `Heatmap` or
+  any of the page-level width constants.
+- **2026-08-02 — `.env.example` was wrong about `SUPABASE_JWT_SECRET` and is
+  now corrected.** It said the variable could be left empty and Realtime would
+  degrade to polling. It signs the token issued at join, so empty means join
+  returns 500 and nothing works; emptying it and calling the endpoint proved it,
+  and restoring it took the same request back to 200. The rule this produced is
+  in METHOD.md → Verification.
+- **2026-08-02 — The privacy page states the unflattering parts on purpose.** IP
+  addresses counted in memory for rate limiting, room titles and display names
+  stored verbatim, and an aggregate over one submitter being that submitter's
+  answer. A page that lists only the good parts is worth nothing to the person
+  who has to trust it, and the last of those is a property METHOD.md →
+  Conventions already says not to paper over.
+- **2026-08-02 — The CSP is nonce-based, and the price is that every page
+  renders per request.** `app/layout.tsx` carries `dynamic = 'force-dynamic'`
+  for the whole tree. Next's inline bootstrap and streamed flight data leave
+  three options — permit inline script, hash it, or nonce it — and only the
+  nonce is both strict and stable across builds. A nonce cannot coexist with a
+  prerendered page, which is not a theory here: with `/` static the home page
+  returned 200 and never hydrated. The full route cache was worth close to
+  nothing anyway, since both pages fetch everything they display after
+  hydration. No `'strict-dynamic'`: it would replace `'self'` rather than add to
+  it, making every chunk depend on a nonce propagating through a
+  `createElement('script')` we do not control, and our chunks are same-origin.
+  The general rule is in METHOD.md → Conventions.
+- **2026-08-02 — `Referrer-Policy: no-referrer`, not the framework default.**
+  Our URLs are credentials: the admin link carries the owner secret in its query
+  string (`PLAN.md` §2.4) and the room link is the only thing needed to enter a
+  room. Nothing here reads `Referer`, so there is nothing to trade against it.
+- **2026-08-02 — `proxy.ts` sets the policy on the request as well as the
+  response, and only the response is proven to matter.** Commenting out the
+  request line changed nothing — the page hydrated and the HTML still carried 16
+  nonces — so Next 16.2.11 reads the nonce from the response header, not the
+  request header its documentation names. Kept on the same reasoning as the
+  `setAuth` call in `lib/realtime.ts`: one line, and the alternative is betting
+  that an undocumented path stays that way across upgrades. The file's comment
+  states both observations rather than the claim that turned out to be false.
+- **2026-08-02 — `scripts/verify-headers.mjs` is kept, like the other five, and
+  needs a production build.** Three sabotages were run and all three were
+  caught: permitting `'unsafe-inline'` failed 2 unit tests and 5 script
+  assertions — including the control, where an injected script genuinely
+  executed; dropping the `wss:` origin from `connect-src` failed 1 unit test and
+  dropped the room to polling, which is the silent failure the assertion exists
+  for. The third sabotage caught nothing, and that is what established the
+  request-header finding above. Re-run this script after touching `lib/csp.ts`,
+  `proxy.ts` or `next.config.ts`.
+- **2026-07-27 — The scheduler's constraints are absorbed by the purge route, not
+  pushed back onto the spec.** `PLAN.md` §6 names `POST` and §4.3 asks for
+  hourly; Vercel Cron only ever issues `GET`, cannot send a custom header, and
+  the Hobby plan refuses to deploy anything more frequent than daily. So both
+  verbs run the same handler, `Authorization: Bearer` is accepted alongside
+  `x-cron-secret`, and `vercel.json` says `0 4 * * *`. The hourly guarantee comes
+  from `pg_cron` either way. JSON carries no comments, so the reason lives in the
+  route's header comment. See METHOD.md → Spec changes.
+- **2026-07-27 — The purge route is deliberately not rate-limited**, unlike the
+  five endpoints in `PLAN.md` §7.2. Nothing touches the database before the
+  credential matches, so an unauthenticated flood costs one SHA-256 per request;
+  a bucket would buy that back at the price of refusing the scheduler after a few
+  retries.
+- **2026-07-27 — A deleted room and a mistyped code read differently, and the
+  difference is decided in the browser.** The API answers both with 404 on
+  purpose — "there used to be a room here" is not something a stranger with a
+  guessed code should be told — so `RoomView` uses its own stored membership as
+  the evidence that the room once existed. The condition was written inverted and
+  shipped nothing: it was caught by running `drive-ui.mjs`, which had been written
+  to catch exactly this and never run. See METHOD.md → Verification.
+- **2026-07-27 — One assertion in `scripts/verify-purge.mjs` is knowingly
+  unproven.** Two sabotages were run and both were caught: dropping the bearer
+  branch failed 2 script assertions and 3 unit tests, and making the credential
+  always match failed 4. The control that a live room survives the purge was left
+  unproven, because the only sabotage that would falsify it — removing or
+  inverting the `expires_at` filter — deletes every room in the live database.
+  The general rule is in METHOD.md → Verification.
 - **2026-07-26 — The two-second live-update target is measured, not asserted.**
   `PLAN.md` §11 M3 now asserts the *transport* — the update arrives with no
   reload while the page still reads "Updating live" — and prints the latency

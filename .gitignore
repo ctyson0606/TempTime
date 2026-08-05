@@ -31,6 +31,7 @@ next-env.d.ts
 # every run of scripts/drive-*.mjs drops these here.
 /room-*.png
 /heatmap.png
+/mobile-*.png
 
 # Environment — never commit real credentials, see .env.example
 .env*

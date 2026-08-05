@@ -43,7 +43,9 @@ export default function SourcePicker({ onPick, active, busy }: SourcePickerProps
           disabled={!source.available || busy}
           title={source.note}
           className={[
-            'rounded-xl px-3 py-1.5 text-xs font-medium transition-colors',
+            // See GridSizePicker in RoomView: thumb-sized on a phone, unchanged
+            // from `sm` up.
+            'inline-flex min-h-9 items-center rounded-xl px-3 py-1.5 text-xs font-medium transition-colors sm:min-h-0',
             !source.available
               ? 'cursor-not-allowed bg-zinc-50 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-600'
               : active === source.id

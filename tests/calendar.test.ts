@@ -19,7 +19,9 @@ describe('calendarMonths', () => {
   })
 
   it('emits whole months, including the days outside the window', () => {
-    const july = calendarMonths(taipei)[0]
+    // `now` explicitly: without it this reads the real clock and the
+    // assertions below only hold during July 2026.
+    const july = calendarMonths(taipei, now)[0]
     expect(july.days).toHaveLength(31)
     expect(july.days[0].date).toBe('2026-07-01')
     expect(july.days[30].date).toBe('2026-07-31')
@@ -27,7 +29,7 @@ describe('calendarMonths', () => {
 
   it('offsets the first of the month to its weekday, counting from Sunday', () => {
     // 2026-07-01 is a Wednesday, 2026-08-01 a Saturday, 2026-09-01 a Tuesday.
-    const [july, august, september] = calendarMonths(taipei)
+    const [july, august, september] = calendarMonths(taipei, now)
     expect(july.leadingBlanks).toBe(3)
     expect(august.leadingBlanks).toBe(6)
     expect(september.leadingBlanks).toBe(2)

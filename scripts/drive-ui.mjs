@@ -162,20 +162,62 @@ try {
   // --- Alice deletes the room ---------------------------------------------
   await a.getByRole('button', { name: 'Delete room' }).click()
   await a.getByRole('button', { name: 'Yes, delete it' }).click()
-  await a.waitForSelector('text=Room deleted', { timeout: 15000 })
+  // Exact: "Room deleted" is a prefix of the notice Bob gets, and a substring
+  // match would report success for either of two different screens.
+  await a.getByRole('heading', { name: 'Room deleted', exact: true }).waitFor({
+    timeout: 15000,
+  })
   report(true, 'the creator can delete the room')
 
   await b.reload()
-  await b.waitForSelector('text=No such room', { timeout: 15000 })
-  report(true, "Bob's next reload says the room is gone")
+  await b
+    .getByRole('heading', { name: 'Room deleted by its creator' })
+    .waitFor({ timeout: 15000 })
+  report(true, "Bob's next reload says the room was deleted by its creator")
+  report(
+    (await b.getByText('No such room').count()) === 0,
+    'and does not send him looking for a typo',
+  )
   await b.waitForTimeout(400)
   await b.screenshot({ path: `${SHOTS}/room-deleted.png`, fullPage: true })
 
   // --- a code that never existed ------------------------------------------
-  const c = await bob.newPage()
+  // A fresh context: what separates this from the screen above is that this
+  // browser was never a member, so it is a different context, not a new page.
+  const stranger = await browser.newContext()
+  const c = await stranger.newPage()
   await c.goto(`${BASE}/r/ZZZZZZ`)
-  await c.waitForSelector('text=No such room', { timeout: 15000 })
-  report(true, 'an unknown code reaches the same notice')
+  await c.getByRole('heading', { name: 'No such room' }).waitFor({ timeout: 15000 })
+  report(true, 'an unknown code says no such room')
+  report(
+    (await c.getByText('deleted by its creator').count()) === 0,
+    'and does not claim a room was deleted that never existed',
+  )
+
+  // --- an expired room reads differently again -----------------------------
+  // The 410 is stubbed rather than planted. That a genuinely expired row
+  // produces ROOM_EXPIRED is proven against the real database in
+  // scripts/verify-purge.mjs; what is under test here is only that the page
+  // says something different when it arrives, and planting one would mean
+  // handing this script the database's secret key. One API path is
+  // intercepted, not the platform's fetch — the same rule as routeWebSocket in
+  // drive-heatmap.mjs.
+  const d = await stranger.newPage()
+  await d.route('**/api/rooms/ZZZZZY', (route) =>
+    route.fulfill({
+      status: 410,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'this room has expired', code: 'ROOM_EXPIRED' }),
+    }),
+  )
+  await d.goto(`${BASE}/r/ZZZZZY`)
+  await d.getByRole('heading', { name: 'Room expired' }).waitFor({ timeout: 15000 })
+  report(true, 'an expired room says it expired')
+  report(
+    (await d.getByText('deleted by its creator').count()) === 0,
+    'and does not blame a creator for a room that ran out of dates',
+  )
+  await stranger.close()
 } catch (error) {
   // Without this the finally block below announces success for a run that
   // stopped halfway, which is worse than no output at all.

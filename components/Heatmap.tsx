@@ -72,11 +72,26 @@ export default function Heatmap({
     if (slot !== hovered) setHovered(slot)
   }
 
+  /**
+   * A finger has no hover, so a tap has to be what reads a slot out — and the
+   * readout is the only place the counts behind a colour are written down. A
+   * tap fires no `pointermove` at all when the finger does not travel, so
+   * without `onPointerDown` the line stays on its default text forever, which
+   * is what a phone actually did.
+   */
+  const release = (event: ReactPointerEvent<HTMLDivElement>) => {
+    // Touch fires `pointerleave` immediately after `pointerup`, so clearing on
+    // it unconditionally would blank the readout in the same frame the tap
+    // filled it. A mouse leaving the grid genuinely has left it.
+    if (event.pointerType === 'mouse') setHovered(null)
+  }
+
   return (
     <div
       className="flex flex-col gap-3"
+      onPointerDown={track}
       onPointerMove={track}
-      onPointerLeave={() => setHovered(null)}
+      onPointerLeave={release}
     >
       <SlotGrid
         room={room}
@@ -87,10 +102,14 @@ export default function Heatmap({
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
         {/* Reserves its line whether or not a pointer is over the grid, so the
-            layout below does not jump as the pointer crosses a cell. */}
-        <p className="min-h-4 text-xs text-zinc-500">
+            layout below does not jump as the pointer crosses a cell.
+            `data-readout` is how a probe finds this line specifically: the
+            heading above it also contains the words "everyone is free", and an
+            unscoped text match reports success against the heading whether or
+            not this ever renders. */}
+        <p data-readout className="min-h-4 text-xs text-zinc-500">
           {hovered === null
-            ? `${submittedCount} ${submittedCount === 1 ? 'person has' : 'people have'} answered. Hover a slot to read it.`
+            ? `${submittedCount} ${submittedCount === 1 ? 'person has' : 'people have'} answered. Tap or hover a slot to read it.`
             : describe(room, hovered, freeCounts[hovered] ?? 0, submittedCount)}
         </p>
         <Legend submittedCount={submittedCount} />

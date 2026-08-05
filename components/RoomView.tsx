@@ -45,16 +45,21 @@ import SlotGrid, { GRID_CARD_WIDTH, GRID_SIZES, type GridSize } from './SlotGrid
 const COLUMN = 'mx-auto w-full max-w-2xl'
 
 /**
- * What the page knows about the room. `missing` and `expired` are separate
- * because they mean different things to whoever is looking: one room was
- * deleted or never existed, the other has simply run its course, and telling
- * someone the wrong one sends them looking for a typo that is not there.
+ * What the page knows about the room.
+ *
+ * Four ways for a room not to be here, and they are not interchangeable.
+ * `expired` ran its course, `destroyed` was deleted by its creator while this
+ * browser was a member, `deleted` is that same event seen by the creator who did
+ * it, and `missing` is a code nothing was ever stored under. Telling someone the
+ * wrong one sends them hunting for a typo that is not there, or waiting for a
+ * room that will never come back.
  */
 type Status =
   | { kind: 'loading' }
   | { kind: 'ready'; room: RoomDetail }
   | { kind: 'missing' }
   | { kind: 'expired' }
+  | { kind: 'destroyed' }
   | { kind: 'deleted' }
   | { kind: 'error'; message: string }
 
@@ -62,12 +67,21 @@ type Status =
  * A malformed code is shown as "no such room" rather than "that is not a code".
  * Both mean the same thing to someone who mistyped it, and the distinction only
  * tells a script whether its guess had the right shape.
+ *
+ * `wasMember` is what separates a deleted room from a mistyped code, and it has
+ * to come from this side: the API answers both with 404 on purpose, since
+ * "there used to be a room here" is not something a stranger with a guessed code
+ * should be told. A browser that holds a membership for this code was in the
+ * room while it existed, so for that browser the 404 means it is gone.
  */
-function statusFromFailure(failure: { code: string; error: string }): Status {
-  if (failure.code === 'ROOM_NOT_FOUND' || failure.code === 'INVALID_CODE') {
-    return { kind: 'missing' }
-  }
+function statusFromFailure(
+  failure: { code: string; error: string },
+  wasMember: boolean,
+): Status {
   if (failure.code === 'ROOM_EXPIRED') return { kind: 'expired' }
+  if (failure.code === 'ROOM_NOT_FOUND' || failure.code === 'INVALID_CODE') {
+    return wasMember ? { kind: 'destroyed' } : { kind: 'missing' }
+  }
   return { kind: 'error', message: failure.error }
 }
 
@@ -165,12 +179,15 @@ export default function RoomView({ code }: { code: string }) {
         setStatus({ kind: 'ready', room: result.data })
         return
       }
+      // Read before forgetting: the membership is the only evidence this
+      // browser has that the room behind a 404 ever existed.
+      const wasMember = readParticipantId(code) !== null
       // A room this browser can no longer use should not leave a token behind:
       // every later request would carry a credential that can only fail.
       if (result.code === 'ROOM_NOT_FOUND' || result.code === 'ROOM_EXPIRED') {
         forgetRoom(code)
       }
-      setStatus(statusFromFailure(result))
+      setStatus(statusFromFailure(result, wasMember))
     })
 
     return () => {
@@ -291,10 +308,12 @@ export default function RoomView({ code }: { code: string }) {
     setJoining(false)
 
     if (!result.ok) {
-      // The room can go away between loading the page and typing a name.
+      // The room can go away between loading the page and typing a name. This
+      // page loaded it a moment ago, so a 404 now is a room that has just been
+      // deleted rather than a code that was never right.
       if (result.code === 'ROOM_NOT_FOUND' || result.code === 'ROOM_EXPIRED') {
         forgetRoom(code)
-        setStatus(statusFromFailure(result))
+        setStatus(statusFromFailure(result, true))
       } else {
         setJoinError(result.error)
       }
@@ -337,11 +356,24 @@ export default function RoomView({ code }: { code: string }) {
     )
   }
 
+  // Deliberately different words from "Room expired" below. Both mean the room
+  // is not coming back, but only one of them is somebody's decision, and someone
+  // who was told the wrong one will either wait for a room that ended or go
+  // asking why a room they were using vanished.
+  if (status.kind === 'destroyed') {
+    return (
+      <Notice
+        title="Room deleted by its creator"
+        body={`Room ${code} was deleted by whoever created it. Everyone's times went with it, and nothing can bring them back.`}
+      />
+    )
+  }
+
   if (status.kind === 'missing') {
     return (
       <Notice
         title="No such room"
-        body={`Nothing is stored under ${code}. It may have been deleted by its creator, or the code may be mistyped.`}
+        body={`Nothing is stored under ${code}. Check the code, or ask whoever set it up for the link again.`}
       />
     )
   }
@@ -350,7 +382,7 @@ export default function RoomView({ code }: { code: string }) {
     return (
       <Notice
         title="Room expired"
-        body="Every day this room covered has passed, so it is being cleaned up. Create a new room to plan the next one."
+        body="Every day this room covered has passed, so it has been cleaned up. Nobody deleted it — rooms go on their own once the last date is over. Create a new room to plan the next one."
       />
     )
   }
@@ -519,10 +551,6 @@ export default function RoomView({ code }: { code: string }) {
       >
         <h2 className="font-medium text-zinc-700 dark:text-zinc-300">Still to come</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>
-            Answers from other people arriving without a reload — for now the results
-            update when you send or withdraw.
-          </li>
           <li>Connecting Google Calendar, Todoist and TickTick directly.</li>
         </ul>
       </section>
@@ -574,7 +602,9 @@ function GridSizePicker({
           onClick={() => onChange(option)}
           aria-pressed={size === option}
           className={[
-            'px-2 py-1 text-xs capitalize transition-colors',
+            // `min-h-9` up to `sm` only: 24px is a fine target for a mouse and
+            // a poor one for a thumb, and the phone pass measured exactly that.
+            'inline-flex min-h-9 items-center px-2 py-1 text-xs capitalize transition-colors sm:min-h-0',
             size === option
               ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
               : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800',
