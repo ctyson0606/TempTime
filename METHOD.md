@@ -131,6 +131,22 @@ present, because each extra round trip into the page changed the timing. Compare
 runs whose instrumentation is identical, and be suspicious of a bug that only
 survives when nobody is looking at it.
 
+**An observation window has to outlast the event it is meant to observe, and
+that is a property of the platform rather than of the plan.** A step written as
+"check the dashboard once and confirm the scheduler authenticated" turned out
+not to be executable: the provider's cron page lists the schedule and offers Run
+and View Logs but reports no outcome for past runs, and on the plan in use
+runtime logs are retained for one hour while the job fires once a day. The
+evidence expires some nineteen hours before anyone can arrive, so the check
+returns an empty list that means nothing at all — neither success nor failure,
+and it reads like the former. Before writing "go and look" into a task,
+establish that the record will still exist when you get there. If it will not,
+there are three ways out: be present inside the window, trigger the event
+yourself, or make the event leave a durable trace. Triggering it yourself is
+usually cheapest, and it costs one named gap — a manual invocation exercises the
+same handler and the same credential but not the scheduler, so state which of
+the two you proved.
+
 **A failure that stops after a change is not a failure the change fixed.** Put
 the suspected cause back and confirm the failure returns. Skipping that step
 costs more than the time it saves, because what gets written down is a diagnosis
@@ -416,7 +432,17 @@ Update semantics:
 - **Logging progress into `METHOD.md`.** It turns a rulebook into a diary and
   makes the rules unfindable.
 - **Keeping stale entries in `STATE.md`.** An outdated "next step" is worse than
-  no next step, because it is followed.
+  no next step, because it is followed. The surest way to manufacture one is to
+  describe the repository's own state in a file the same commit is about to
+  change: "not committed and not deployed" was written into `STATE.md`, committed
+  alongside the work it described, and was false a second later. Two later memory
+  updates edited the sections about the new work and left it standing, so the
+  file spent two days telling its reader to push something already pushed. Two
+  rules follow. Never write a claim into `STATE.md` that the act of committing
+  falsifies — *verification* status belongs there, *publication* status is git's
+  and can be read from it in one command. And a memory update re-reads the whole
+  file, not the sections its own task touched, because the stale entry is never
+  in those sections.
 - **Encoding project specifics into an agent definition.** Stack, paths,
   commands and current goals hardcoded into `.claude/agents/` become a third
   memory store that silently goes stale. Agent files state principles and point

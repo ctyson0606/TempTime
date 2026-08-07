@@ -1,7 +1,7 @@
 # STATE
 
-> Last updated: 2026-08-05 (deployed and verified; `PLAN.md` §12 run with a real
-> second person; then the grid flipped from busy time to free time)
+> Last updated: 2026-08-07 (the free-time flip is live and verified against the
+> deployment; the cron credential is confirmed; nothing is in flight)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -11,34 +11,31 @@ archived — git holds the history. For durable rules and workflow, see
 
 ## Current Focus
 
-**The app is deployed and reachable at `https://temp-time.vercel.app`.** Every
-milestone in `PLAN.md` §11 is complete, committed, pushed, and now verified
-against the deployment rather than only against a laptop.
+**The app is deployed at `https://temp-time.vercel.app`, and what is deployed is
+the free-time version.** Every milestone in `PLAN.md` §11 is complete, and so is
+the product change that followed them: the grid collects the time someone *is*
+free, and an import can only subtract from it (`PLAN.md` §3.4, §10, §14, and the
+Recent Decisions below). All of it is committed, pushed, and verified against the
+deployment rather than only against a laptop.
 
 Two of the three questions that could only be answered by publishing are
 answered. The nonce CSP does survive a CDN in front of it — the pages hydrate
 online, which is not something a screenshot or a 200 could ever have shown. The
-daily cron path works end to end. The third, the live-update latency, is **not**
-answered and could not be: this machine's own network path swamps the
-measurement (see Open Questions).
+daily purge route works end to end, and the provider's own invoker does
+authenticate against it — a manual run on 2026-08-07 returned `GET 200`. What
+remains unobserved is narrower than it was: the *scheduled* firing, as opposed to
+a manual one (see Next Steps). The third, the live-update latency, is better
+understood than it was and still not a clean number: this machine's own network
+path inflates every figure taken here (see Open Questions).
 
-`PLAN.md` §12 has now been run with a real second person on a different machine,
-and it worked: the answer arrived with no reload, on the socket rather than the
-fallback, within a second or two. That is the last step in the spec that had
+`PLAN.md` §12 has been run with a real second person on a different machine, and
+it worked: the answer arrived with no reload, on the socket rather than the
+fallback, within a second or two. That was the last step in the spec that had
 never been executed.
 
-So the whole of what was planned is built, deployed and seen working by someone
-other than its author.
-
-**Then the product changed.** The grid now collects the time someone *is* free
-rather than the time they are busy, and an import can only subtract from it. That
-work is finished and verified locally but is **not committed and not deployed**,
-so the live site is currently a version behind. Everything about it is in the
-Recent Decisions below and in `PLAN.md` §3.4, §10 and §14.
-
-After that lands, the next body of work is the second-stage connectors, which
-publishing unblocked — Google's OAuth review needs a reachable privacy page, and
-there now is one.
+So nothing is in flight. The next body of work is the second-stage connectors,
+which publishing unblocked — Google's OAuth review needs a reachable privacy
+page, and there now is one.
 
 ---
 
@@ -109,8 +106,9 @@ there now is one.
 - Seven scripts that verify against the running system, all development-only
   because they write to the live database: `scripts/verify-rls.mjs` (the
   repeatable proof of `PLAN.md` §2.2), `scripts/drive-ui.mjs` (the M1
-  acceptance test in two browser contexts, 21 assertions, now also covering the
-  four absence notices), `scripts/verify-heatmap.mjs`
+  acceptance test in two browser contexts, 25 assertions, also covering the
+  four absence notices and the three one-shot painter actions),
+  `scripts/verify-heatmap.mjs`
   (19 assertions over the overlay API, its privacy and its authorisation),
   `scripts/drive-heatmap.mjs` (the M3 acceptance test, 28 assertions in two
   contexts, covering both the socket and the fallback),
@@ -124,19 +122,30 @@ there now is one.
   policy; it refuses to run if it sees the development policy at all. All but
   `verify-purge.mjs` and `verify-rls.mjs` create rooms against a limit of ten an
   hour, so a handful of runs an hour is the ceiling for those.
-- 232 tests, with `format:check`, `lint` and `typecheck` clean.
+- 236 tests, with `format:check`, `lint` and `typecheck` clean. Re-run on
+  2026-08-07: 15 files, 236 passed.
 - Deployed on Vercel (Hobby, team `ctyson`, project `temp-time`). Functions are
   pinned to Tokyo `hnd1`, beside the database; all five variables from
   `.env.example` are set for Production and Preview; `vercel.json`'s daily cron
   is registered from the repository with no dashboard configuration.
   Development and production share one Supabase project.
-- The deployment is verified, not assumed. Against `https://temp-time.vercel.app`:
-  `drive-ui.mjs` 21/21, `verify-headers.mjs` 22/22, `drive-heatmap.mjs` 28/28.
-  The first of those is the one that mattered — dragging, sending and deleting
-  are impossible on a page that has not hydrated, so passing them is the proof
-  that the nonce CSP works behind a CDN. The purge route answered 401 with no
-  credential, 401 with a wrong one, and `200 {"ok":true,"deleted":0}` with the
-  real one over `GET` + bearer, which is exactly how Vercel Cron calls it.
+- The deployment is verified, not assumed, and the run that counts is the one
+  taken **after** the free-time flip: against `https://temp-time.vercel.app`,
+  `drive-ui.mjs` 25/25 and `drive-heatmap.mjs` 28/28 including both transports,
+  with the live update at 806ms. `verify-headers.mjs` 22/22 was taken before the
+  flip and nothing it covers changed. `drive-ui.mjs` is the one that mattered —
+  dragging, sending and deleting are impossible on a page that has not hydrated,
+  so passing them is the proof that the nonce CSP works behind a CDN. The purge
+  route answered 401 with no credential, 401 with a wrong one, and
+  `200 {"ok":true,"deleted":0}` with the real one over `GET` + bearer, which is
+  exactly how Vercel Cron calls it.
+- Vercel's own invoker authenticates against that route. Pressing **Run** on the
+  Cron Jobs settings page on 2026-08-07 produced `GET 200 /api/cron/purge` in the
+  runtime logs, so the platform does send `CRON_SECRET` as a bearer token and our
+  branch accepts it. The 200 carries weight only because the negative controls
+  were run first against the same deployment — no credential and a wrong
+  credential both returned 401 — so the route is not something that answers 200
+  to everything.
 - `PLAN.md` §12, the two-browser test, run on 2026-08-05 with a second person on
   their own machine. Reported: the room updated on its own with no reload, the
   badge read "Updating live" — so the Realtime socket, not the four-second
@@ -151,40 +160,31 @@ there now is one.
   `subtractMask` is how an import lands. `ManualPainter` carries Select all,
   Invert and Clear all; there is no busy/free mode. The draft key moved from
   `temptime:draft:` to `temptime:free:` so a pre-flip draft cannot be read
-  inverted.
+  inverted. All four driver scripts were swept for the painter's accessible name
+  and every one of them now asks for `Your free times`; `drive-heatmap.mjs`
+  needed more than the label, because which slots suit whom inverted with it.
 - Milestone coverage: `PLAN.md` §11 holds the per-item state; do not duplicate it
   here. M1 through M4 are all complete, acceptance tests included.
 
 **In Progress**
-- The free-time flip is written and verified but **not committed**: 236 unit
-  tests, `drive-ui.mjs` at 25/25 against a dev server, and two sabotages that
-  both failed the right things. It has never run against the deployment, because
-  it has not been pushed.
+- Nothing. The repository, the deployment and this file agree.
 
 **Blocked**
-- Nothing waits on an outside decision. Vercel's own first cron firing is a
-  wait rather than a block: `0 4 * * *` UTC, so the Cron tab is worth a look
-  from 2026-08-06 onwards to confirm the scheduler really sends the bearer
-  token it is documented to send.
+- Nothing waits on an outside decision. One item waits on somebody else's queue
+  and has not been entered yet: Google's sensitive-scope review and TickTick's
+  API application, both of which have to be applied for before the connector
+  work they gate can be finished. See Next Steps.
 
 ---
 
 ## Next Steps
 
-1. Commit and push the free-time flip, then re-run the three browser scripts
-   against the deployment. Until that happens the live site and this repository
-   disagree about what the grid means, which is the one difference nobody looking
-   at either can see.
-2. Apply for the slow OAuth access now, before writing any of it. Google's
+1. Apply for the slow OAuth access now, before writing any of it. Google's
    sensitive-scope review and TickTick's API application are queues measured in
    weeks of somebody else's time, and Google's precondition — a reachable
    privacy page — is satisfied as of 2026-08-05. Applying first turns the wait
    into the development window instead of a gap after it.
-3. From 2026-08-06, check Vercel's Cron tab once. The route is proven; what is
-   not is that the scheduler sends `Authorization: Bearer $CRON_SECRET` as
-   documented. A silent 401 there looks like nothing at all, and `pg_cron` would
-   keep hiding it.
-4. Then the second-stage connectors, in the order `PLAN.md` §8.2 argues for:
+2. Then the second-stage connectors, in the order `PLAN.md` §8.2 argues for:
    Todoist first because it needs nothing but OAuth, Google next because its
    sensitive-scope review is a queue rather than a build, TickTick last because
    its API application has no predictable timeline. Apply for the slow ones early
@@ -192,6 +192,16 @@ there now is one.
    there is no account system, so where an OAuth refresh token would live has to
    be decided rather than assumed. Keeping it in the tab, and never on the
    server, is the answer consistent with `PLAN.md` §2.1.
+3. Optional, and only inside a one-hour window: watch one *scheduled* purge fire.
+   The credential question is answered — see Done — but by a manual Run rather
+   than by the scheduler. The remaining gap can only be closed by being present
+   while the evidence exists: the job fires between 04:00 and 04:59 UTC, and this
+   plan keeps runtime logs for one hour, so 05:00–05:59 UTC — 13:00–13:59 in
+   Taipei — is the only window in which the record can be read. Everything else
+   here is proven, `pg_cron` deletes the same rows hourly regardless, and the only
+   thing that could newly break it is `CRON_SECRET` changing. Worth one look if
+   convenient; deliberately not worth building durable logging for (see Recent
+   Decisions).
 
 ---
 
@@ -249,6 +259,13 @@ there now is one.
 - **The free Supabase project pauses after a week idle**, while rooms can live
   for months. A room that will not load is worth checking in the dashboard before
   it is debugged as a bug.
+- **Nothing on Vercel Hobby remembers a cron run for longer than an hour.** The
+  Cron Jobs settings page shows the path, the expression and two buttons — Run
+  and View Logs — and no outcome for any past invocation; runtime logs are
+  retained for one hour on this plan. A daily job therefore cannot be audited
+  after the fact, and the empty log list that results looks like success. Hobby
+  also spreads the trigger across the whole named hour rather than firing on the
+  minute. The general rule is in METHOD.md → Verification.
 - `npm audit` reports high-severity advisories, all transitive inside Next.js's
   own pinned dependencies. `npm audit fix --force` resolves them by downgrading
   Next.js to 9.3.3, so the correct action is to leave them and wait for a Next.js
@@ -263,6 +280,16 @@ there now is one.
 
 ## Recent Decisions
 
+- **2026-08-07 — The purge route is not given durable run logging, and the
+  scheduler question is closed by a manual Run instead.** Writing a timestamp on
+  every successful purge would make the job auditable at any time, which is the
+  thing Hobby's one-hour log retention denies. It was rejected as
+  disproportionate: the primary destruction path is `pg_cron`, this route is the
+  backup, and the only failure mode left after the manual Run returned `GET 200`
+  is somebody changing `CRON_SECRET`, which does not happen on its own. Revisit
+  if the backup ever becomes the primary, or if a second scheduled job appears —
+  at two jobs the durable trace stops being a one-off and starts being
+  infrastructure.
 - **2026-08-05 — The grid collects free time, not busy time.** Three reasons, in
   the order they carry weight: people answer "when are you free" accurately and
   "when are you busy" approximately; an hour with nothing on the calendar is not
