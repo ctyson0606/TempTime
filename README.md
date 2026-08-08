@@ -1,5 +1,7 @@
 # TempTime
 
+**English** · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
+
 Find a time everyone is free, without anyone signing up — and without anyone,
 including whoever runs the server, learning what is in your calendar.
 
@@ -74,6 +76,53 @@ publishable/secret pair, not the legacy anon/service_role pair beside it.
    list holds one current and one previous key, another rotation pushes HS256
    out of it, and room tokens can live for up to three months. Moving the key to
    "standby" has the same effect: standby keys are not used for verification.
+
+## A second machine
+
+If the project is already running somewhere and you are only adding another
+computer, skip the Supabase section entirely — the database already exists and
+both machines talk to it.
+
+A clone brings everything except the git-ignored files, and only two of those
+cannot be regenerated. Carry them across by hand:
+
+| File | Why a clone does not bring it |
+| --- | --- |
+| `.env.local` | Real credentials. Nothing runs without it |
+| `PLAN.md` | The implementation spec, deliberately not committed |
+
+Copy nothing else. `node_modules`, `.next`, `next-env.d.ts` and
+`tsconfig.tsbuildinfo` are git-ignored too, and every one of them holds
+platform-native binaries or absolute build paths. They are rebuilt, not moved:
+
+```sh
+npm ci
+npx playwright install chromium   # only needed for the driver scripts
+```
+
+Playwright's browsers live outside both the repository and `node_modules` —
+`~/Library/Caches/ms-playwright` on macOS, `%LOCALAPPDATA%\ms-playwright` on
+Windows — so copying the project directory never brings them.
+
+**If `npm ci` fails with `Missing: <package> from lock file`**, the lockfile was
+generated on a different platform and lacks an optional dependency yours needs.
+Run `npm install` instead — `npm ci` is defined not to write the lockfile, which
+is why it refuses rather than repairs. The resulting diff should add an entry
+marked `"optional": true` and change no `version`, `resolved` or `integrity`
+line; commit and push it, since the repaired lockfile is a superset that works
+on both platforms.
+
+Then verify, in this order, because each step proves something the last one did
+not:
+
+```sh
+npm test                        # the code and its dependencies — no credentials involved
+node scripts/verify-rls.mjs     # the credentials, and RLS on the live database
+npm run dev                     # the whole path: create a room and submit
+```
+
+`CRON_SECRET` is the one variable none of those touch. It is needed only by
+`verify-purge.mjs`, and a wrong value fails loudly with a 401.
 
 ## Running
 

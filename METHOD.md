@@ -54,6 +54,14 @@ its own.
 - Conversation with the user: **Chinese**.
 - All written output — these files, code, comments, commit messages: **English**.
 
+The rule governs the *working* language, so it has one exception: documentation
+written for a reader rather than for us may be translated when the user asks for
+it. `README.md` carries `README.zh-TW.md` and `README.zh-CN.md` for that reason.
+Nothing else moves — memory files, specs, comments and commit messages stay
+English, because a second copy of those would be a second store to keep in step.
+Each translation is exactly that cost paid deliberately: every README change is
+now three changes, and no test can see them disagree.
+
 ### Verification
 
 A suite that passes on its first run is unverified, not correct. It is equally
@@ -245,6 +253,15 @@ buttons already are" is a rule this design can be held to and can argue about;
 "44 points, because Apple says so" invites a redesign of every control that has
 never bothered anyone, and is the kind of number that gets loosened the first
 time it is inconvenient.
+
+**A translation is verified on what gets copied out of it, not on how it reads.**
+The prose can be clumsy and still work; a command that got translated along with
+the sentence around it cannot, and the reader will paste it without suspecting
+the document. So diff the copy-pasteable parts mechanically — strip the fences
+and the comments, compare the remaining lines against the original — rather than
+scanning them by eye. Structure is worth the same treatment: matching counts of
+headings, code blocks and table rows is what catches a section that was dropped
+during translation, and both checks together took one command here.
 
 ### Spec changes
 

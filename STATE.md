@@ -1,7 +1,7 @@
 # STATE
 
 > Last updated: 2026-08-08 (development now runs on two machines, verified on
-> both; nothing is in flight)
+> both; the README is translated; nothing is in flight)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -103,7 +103,11 @@ page, and there now is one.
   memory, room titles and display names stored verbatim, and an aggregate of one
   submitter being that submitter's answer.
 - `README.md`: local setup, the Supabase project's two settings and three
-  migrations, the seven verification scripts, and the deployment compromises.
+  migrations, a second-machine section that skips all of that, the seven
+  verification scripts, and the deployment compromises. Translated in full as
+  `README.zh-TW.md` and `README.zh-CN.md`, cross-linked from a language line at
+  the top of each. The three agree on 12 headings, 6 code blocks and 13 table
+  rows, and their 16 lines of commands were diffed rather than read.
 - Seven scripts that verify against the running system, all development-only
   because they write to the live database: `scripts/verify-rls.mjs` (the
   repeatable proof of `PLAN.md` §2.2), `scripts/drive-ui.mjs` (the M1
@@ -297,6 +301,18 @@ page, and there now is one.
 
 ## Recent Decisions
 
+- **2026-08-08 — The README is translated into both Chinese scripts, and the
+  language rule gains its first exception.** Asked for directly by the user. The
+  English-only rule was written for working output — memory, specs, comments,
+  commit messages — where a second copy is a second store that drifts, and that
+  reasoning does not reach a document whose whole purpose is to be read by
+  someone else. The cost was named before it was paid rather than discovered
+  after: every README change is now three changes, and nothing in the test suite
+  can see the three disagree. Accepted on the grounds that this README changes
+  rarely. If it stops being worth it, the cheap retreat is to cut the two Chinese
+  files back to a quick-start and point the detail at the English one. The
+  general rule is in METHOD.md → Workflow → Language rule, and how a translation
+  is checked is in Verification.
 - **2026-08-08 — A second machine is set up by copying two files by hand, and the
   tool built to automate it was deleted.** A clone brings everything except the
   git-ignored files, and only two of those cannot be regenerated: `PLAN.md` and
