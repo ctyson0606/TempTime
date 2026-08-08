@@ -1,7 +1,7 @@
 # STATE
 
-> Last updated: 2026-08-07 (the free-time flip is live and verified against the
-> deployment; the cron credential is confirmed; nothing is in flight)
+> Last updated: 2026-08-08 (development now runs on two machines, verified on
+> both; nothing is in flight)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -25,8 +25,9 @@ daily purge route works end to end, and the provider's own invoker does
 authenticate against it — a manual run on 2026-08-07 returned `GET 200`. What
 remains unobserved is narrower than it was: the *scheduled* firing, as opposed to
 a manual one (see Next Steps). The third, the live-update latency, is better
-understood than it was and still not a clean number: this machine's own network
-path inflates every figure taken here (see Open Questions).
+understood than it was and still not a clean number: the network path out of the
+Windows machine, where every figure so far was taken, inflates all of them (see
+Open Questions).
 
 `PLAN.md` §12 has been run with a real second person on a different machine, and
 it worked: the answer arrived with no reload, on the socket rather than the
@@ -123,7 +124,18 @@ page, and there now is one.
   `verify-purge.mjs` and `verify-rls.mjs` create rooms against a limit of ten an
   hour, so a handful of runs an hour is the ceiling for those.
 - 236 tests, with `format:check`, `lint` and `typecheck` clean. Re-run on
-  2026-08-07: 15 files, 236 passed.
+  2026-08-08 after a clean reinstall: 15 files, 236 passed on both machines, and
+  all three checks green on Windows.
+- **Development runs on two machines**, a Windows desktop and a MacBook Air, both
+  against the same Supabase project. Setting the second one up needed a clone,
+  `npm install`, `npx playwright install chromium` for the driver scripts, and
+  two files carried by hand — `PLAN.md` and `.env.local`, neither of which a
+  clone brings. Verified there on 2026-08-08 in three widening steps: 236 tests
+  (code and dependencies), `verify-rls.mjs` 9/9 (four of the five credentials,
+  and the RLS guarantees on the live database), and a room created through the
+  dev server (the whole path). `CRON_SECRET` is the one variable nothing has
+  exercised there; it is needed only by `verify-purge.mjs`, and a wrong value
+  fails loudly as a 401.
 - Deployed on Vercel (Hobby, team `ctyson`, project `temp-time`). Functions are
   pinned to Tokyo `hnd1`, beside the database; all five variables from
   `.env.example` are set for Production and Preview; `vercel.json`'s daily cron
@@ -227,25 +239,30 @@ page, and there now is one.
   moving), the `pointerleave` clear path (removing it changes nothing), and a
   zero-length tap (60ms behaves the same). Do **not** make the probe wait longer:
   there is no handler run to wait for. The feature works when it works, and a
-  real finger has never been observed to miss.
+  real finger has never been observed to miss. One cheap experiment has become
+  available and has not been run: the same script on the MacBook. Every
+  observation so far comes from one machine, so a failure rate that differs there
+  would separate the code from the environment in a way nothing tried yet can.
+  Measure the rate over three or four runs on each, never one run against one.
 - **What is the live-update latency in production?** Better understood than it
   was, and still not a clean number. Two measurements exist against the
   deployment: 1843ms before the free-time flip and **806ms after it**, both from
-  this machine, both inside the two-second target. The second one is what forced
+  the Windows machine, both inside the two-second target. The second one is what forced
   a correction: 806ms is *faster* than the "transport floor" of ~2s recorded
   earlier, which is impossible, and the explanation is that the floor had been
   measured with a cold `curl` — DNS, TCP and TLS on every sample. Over a reused
-  connection this machine's per-request cost is **0.52s**, and the app holds warm
+  connection that machine's per-request cost is **0.52s**, and the app holds warm
   connections and an open socket. So the honest reading is that a live update
-  costs roughly one warm round trip plus the `/heatmap` refetch, and that this
-  machine's route still inflates it: the traffic enters Vercel in London
+  costs roughly one warm round trip plus the `/heatmap` refetch, and that its
+  route still inflates the figure: the traffic enters Vercel in London
   (`x-vercel-id` reads `lhr1::hnd1::…`) and pays about 280ms of TCP handshake to
   Tokyo. A figure from a normal Asian network is still worth taking; a second
   person on their own machine perceived "a second or two" on 2026-08-05
-  (`PLAN.md` §12) but nobody timed it. The general rule, including the mistake,
-  is in METHOD.md → Verification. Before trusting any figure taken here: check
-  the edge code in `x-vercel-id`, and time the *second* request on a connection
-  rather than the first.
+  (`PLAN.md` §12) but nobody timed it. The MacBook is now the cheapest way to get
+  that second vantage point, and its edge code has never been read. The general
+  rule, including the mistake, is in METHOD.md → Verification. Before trusting
+  any figure from either machine: check the edge code in `x-vercel-id`, and time
+  the *second* request on a connection rather than the first.
 - **How should the scale read with very few submitters?** With two people the
   levels in use are the third and the fifth, so "one of two is free" already looks
   fairly strong. It is legible and nobody has complained; whether it should
@@ -280,6 +297,29 @@ page, and there now is one.
 
 ## Recent Decisions
 
+- **2026-08-08 — A second machine is set up by copying two files by hand, and the
+  tool built to automate it was deleted.** A clone brings everything except the
+  git-ignored files, and only two of those cannot be regenerated: `PLAN.md` and
+  `.env.local`. Everything else ignored — `node_modules`, `.next`,
+  `next-env.d.ts`, `tsconfig.tsbuildinfo`, the driver screenshots — is
+  platform-native or path-bearing and has to be rebuilt rather than carried. A
+  bundle script that packed the two into one text file, with hashes and drift
+  detection, was written and verified and then reverted at the user's word as
+  more machinery than the job needs; the general form is in METHOD.md →
+  Anti-Patterns. Playwright's browsers are the one thing outside both git and
+  `node_modules`, so `npx playwright install chromium` is a separate step on any
+  new machine.
+- **2026-08-08 — The lockfile repaired on macOS was committed back, not left
+  local, and the commit was proved on Windows.** `npm ci` failed on the MacBook
+  because `package-lock.json` had been generated on Windows and lacked a
+  darwin-side optional dependency. Keeping two platform lockfiles was never
+  considered — the repaired one is a superset, and the entry it gains is marked
+  `"optional": true`, so Windows skips it. The diff also removed thirteen
+  `"peer": true` lines, which is npm correcting its own stale metadata and
+  changes no version. That reasoning was checked rather than trusted: `npm ci`
+  was run on Windows against the pulled lockfile and succeeded, followed by 236
+  tests and a clean `lint`, `typecheck` and `format:check`. The general rule is
+  in METHOD.md → Conventions.
 - **2026-08-07 — The purge route is not given durable run logging, and the
   scheduler question is closed by a manual Run instead.** Writing a timestamp on
   every successful purge would make the job auditable at any time, which is the
@@ -505,7 +545,7 @@ page, and there now is one.
 - **2026-07-26 — Supabase, decided by the goal rather than the technology.** The
   question that settled it was whether the point right now is to run the flow
   alone or to send a friend a link; the answer was the link, which rules out a
-  database only this machine can reach. `PLAN.md` needed no sweep as a result —
+  database only one machine can reach. `PLAN.md` needed no sweep as a result —
   that is the bill METHOD.md → Spec changes warned about, and picking the product
   the spec already named is what avoided paying it.
 - **2026-07-26 — The project sits in Tokyo (`ap-northeast-1`), and cannot be

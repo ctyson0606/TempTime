@@ -319,8 +319,10 @@ Update semantics:
   stack, data model, API contract, milestones, verification. It answers *what is
   being built*; `STATE.md` answers *how far along it is*. It is git-ignored and
   stays on the local machine, so references to it from `STATE.md` will dangle for
-  anyone who clones the repository — cite it by section number rather than
-  copying its content across, and never mirror its decisions into `STATE.md`.
+  anyone who clones the repository — including a second machine of one's own,
+  which needs `PLAN.md` and `.env.local` carried across by hand because a clone
+  brings neither. Cite it by section number rather than copying its content
+  across, and never mirror its decisions into `STATE.md`.
 - `CLAUDE.md` is **pointer-only**: it imports the two memory files and states the
   language and update-trigger rules. Project knowledge never goes in it.
 - Agent definitions live in `.claude/agents/`, tracked in git. They carry
@@ -416,6 +418,18 @@ Update semantics:
   malformed secret is our deployment problem: throw at the call site so it
   surfaces on the first request instead of degrading into blanket 401s that look
   like users mistyping.
+- **A lockfile records the platform that generated it.** `package-lock.json`
+  written on Windows omitted the top-level `@emnapi/runtime` that
+  `@img/sharp-wasm32` depends on — a package win32 never installs — and the first
+  `npm ci` on macOS refused outright with `Missing: @emnapi/runtime@1.11.3 from
+  lock file`, leaving no `node_modules` at all. `npm ci` is defined not to write
+  the lockfile, so `npm install` is the repair. Read the diff before committing
+  it: the correct one adds an entry marked `"optional": true` and touches no
+  `version`, `resolved` or `integrity` line, which is what separates filling a
+  platform's gap from an upgrade that arrived uninvited. This recurs every time a
+  dependency is added and installed on only one machine, and the repaired
+  lockfile is proven only by running `npm ci` on the *other* platform — the one
+  whose behaviour the edit put at risk, and the one that cannot report on itself.
 
 ---
 
@@ -542,3 +556,12 @@ Update semantics:
   them; the `@` characters end up inside the string. This silently corrupted a
   commit message. Two shells are available in this environment and each needs its
   own syntax — see Git and publishing for the commit-message form.
+- **Building a transfer tool for files that could be copied by hand.** Setting up
+  a second machine needs two git-ignored files, moved once. A pack/unpack script
+  — one text bundle, a SHA-256 per file, drift detection, three sabotages run to
+  prove the checks bite — was written, verified and then deleted at the user's
+  word. It was working and still wrong for the job: it put a second copy of
+  `.env.local` in the working tree, added a file that itself has to be kept in
+  step with the originals, and replaced two drags with three commands to learn.
+  Count the files and how often they move before automating a transfer. Two
+  files, once, is not a pipeline.
