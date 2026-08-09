@@ -1,7 +1,7 @@
 # STATE
 
-> Last updated: 2026-08-10 (the heatmap's empty state now has a name of its own;
-> one pre-existing intermittent failure was measured and is open)
+> Last updated: 2026-08-10 (the heatmap's empty state has a name of its own, and
+> the members/count disagreement is fixed at its source; nothing is open)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -37,11 +37,12 @@ never been executed.
 The heatmap tap failure, open since 2026-08-02, is closed: it was
 `scripts/drive-mobile.mjs` tapping a placeholder, not a defect in the app, and
 the placeholder now carries a name of its own so the two grids cannot be
-confused again (see Recent Decisions). Chasing it surfaced one unrelated
-intermittent failure that had never been measured; it is in Open Questions and
-nothing else is in flight. The next body of work is the second-stage connectors,
-which publishing unblocked — Google's OAuth review needs a reachable privacy
-page, and there now is one.
+confused again (see Recent Decisions). Chasing it surfaced a real defect in
+`GET /heatmap` — two halves of "who has answered" read from two tables, and a
+window in which they disagreed — which is also fixed and proven both ways.
+Nothing is open and nothing is in flight. The next body of work is the
+second-stage connectors, which publishing unblocked — Google's OAuth review
+needs a reachable privacy page, and there now is one.
 
 ---
 
@@ -119,7 +120,8 @@ page, and there now is one.
   acceptance test in two browser contexts, 25 assertions, also covering the
   four absence notices and the three one-shot painter actions),
   `scripts/verify-heatmap.mjs`
-  (19 assertions over the overlay API, its privacy and its authorisation),
+  (20 assertions over the overlay API, its privacy, its authorisation and the
+  agreement between its member flags and its count),
   `scripts/drive-heatmap.mjs` (the M3 acceptance test, 28 assertions in two
   contexts, covering both the socket and the fallback, and that the empty
   overlay does not answer to the live one's accessible name),
@@ -250,19 +252,6 @@ page, and there now is one.
   proposed. Worth remembering rather than chasing: if it returns, this is the
   paragraph that says it has happened before, and the polling fallback is what
   keeps the room working while it is diagnosed.
-- **Why does Bob's member list sometimes show one "Sent" when the readout
-  already says two people have answered?** `scripts/drive-heatmap.mjs` fails
-  that one assertion at roughly one run in four, on the local dev server; every
-  other assertion passes. Measured on both trees before it was written down —
-  1 in 4 on the untouched tree and 2 in 5 while the empty-grid rename was in
-  progress, which is the same rate inside the noise, so it is pre-existing and
-  the rename did not cause it. What makes it worth a look rather than a shrug:
-  the member list and the readout are rendered from *the same* `/heatmap`
-  response, `heatmap.participants` and `heatmap.submittedCount`, so a render in
-  which they disagree should not be reachable. Either the two are not as
-  coupled as they look, or the endpoint can answer with a `submitted_at` that
-  has not caught up with its own count. Start by asking which, on the server,
-  before touching the probe.
 - **How should the scale read with very few submitters?** With two people the
   levels in use are the third and the fifth, so "one of two is free" already looks
   fairly strong. It is legible and nobody has complained; whether it should
@@ -297,6 +286,21 @@ page, and there now is one.
 
 ## Recent Decisions
 
+- **2026-08-10 — `GET /heatmap` derives "who answered" from the submissions, not
+  from `participants.submitted_at`.** The two were read in two concurrent
+  queries while `POST /submit` wrote them in two separate statements, so a read
+  in between returned `submittedCount: 2` beside a member the list still called
+  Waiting — the page said "2 people have answered" next to a row reading
+  "Waiting". Found at roughly one run in four in `drive-heatmap.mjs`, then made
+  deterministic: hold the window open, fire the submit without awaiting it, and
+  read from a *third* caller. Disagrees every time without the fix, agrees every
+  time with it, and `drive-heatmap.mjs` went from 2 failures in 8 to 0 in 8.
+  Wrapping the two writes in a transaction was rejected as the smaller fix — it
+  narrows the window instead of removing it, and the reader would still be
+  making two queries. `submitted_at` is still written and still the column
+  Realtime watches; nothing else about it changed. `verify-heatmap.mjs` gains
+  the invariant. The general rule is in METHOD.md → Conventions, and what the
+  first failed sabotage taught is in Verification.
 - **2026-08-10 — The heatmap's empty state gets an accessible name of its own,
   sharing no words with the live one.** It is `Results, no answers yet` against
   `Everyone's free time`. Adding to the live name rather than replacing it was

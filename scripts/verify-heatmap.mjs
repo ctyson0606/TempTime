@@ -222,6 +222,18 @@ async function main() {
       JSON.stringify(h.participants),
     )
     report(h.mySubmitted === true, 'mySubmitted reflects the caller')
+    // The two halves of "who has answered" must agree inside one response. They
+    // used to come from two tables — `submissions` for the count, and
+    // `participants.submitted_at` for the flags — written by two statements and
+    // read by two concurrent queries, so a read landing between the writes
+    // returned a count of two beside one member still marked Waiting. Both are
+    // derived from the submissions list now, which is what makes this invariant
+    // hold rather than usually hold.
+    report(
+      h.participants.filter((p) => p.submitted).length === h.submittedCount,
+      'the members marked as sent and the submitted count agree',
+      `${h.participants.filter((p) => p.submitted).length} vs ${h.submittedCount}`,
+    )
 
     // --- best slots --------------------------------------------------------
     report(h.bestSlots.length > 0, 'best slots were found', JSON.stringify(h.bestSlots))

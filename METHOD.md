@@ -99,6 +99,24 @@ whose blast radius is the assertion you are testing, move it somewhere with
 fewer neighbours if it is not, and treat "the run died first" as a result that
 has not answered the question.
 
+**Widening a window proves nothing if the observer is blocked until it closes.**
+Chasing a response whose two halves disagreed, the suspected window sat between
+two writes inside one request, so a delay was dropped between them — and the
+failure stayed at about one run in two rather than becoming certain. The delay
+was real and the reasoning was right; the observer was wrong. Every watcher in
+that test was waiting on the very request holding the window open, so none of
+them could look inside it. Reproducing it took a *third* party: fire the write
+without awaiting it, sleep into the middle, and read from a separate caller.
+Then it was 100%, and 0% with the fix. Before widening a window, ask who is
+awake while it is open.
+
+The same run made the other half of the point. The browser probe had two live
+explanations — two tables disagreeing, or a stale response overwriting a newer
+one — and its failure message carried only the number it asserted on, which is
+consistent with both. Printing the readout *and* the member list at the moment
+of failure separated them in one run. When a probe fails, capture enough state
+to tell the candidate explanations apart, not just the value that failed.
+
 A run can also die on the project's own defences. Three control runs aborted at
 room creation rather than reaching the assertion under test, because repeated
 probing had used up a rate limit — a result that looks like the sabotage working
@@ -500,6 +518,17 @@ Update semantics:
   `pointerup`, so clearing state there blanks whatever the tap just set: gate the
   clear on `pointerType === 'mouse'`. Any hover-driven affordance needs a tap
   path, and the wording needs to name both.
+- **Two facts in one response come from one query.** `GET /heatmap` counted the
+  rows in `submissions` for "how many answered" and read
+  `participants.submitted_at` for "who answered", in two concurrent queries,
+  while `POST /submit` wrote those two tables in two separate statements. A read
+  landing between the writes returned "2 people have answered" beside a member
+  still marked Waiting — about one run in four, and reproducible on demand. Both
+  are derived from the submissions list now, which makes the disagreement
+  unreachable rather than unlikely. The general shape: when a response asserts
+  two things about the same fact, derive them from one read, or accept that
+  every window between the writes is a response someone will see. A transaction
+  around the writes narrows the window; one source removes it.
 - **Caller errors return, configuration errors throw.** A bad credential or
   malformed input is the caller's problem: return `null` or a typed result the
   route maps to a status code, without revealing which check failed. A missing or

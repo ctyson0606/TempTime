@@ -69,10 +69,13 @@ export async function GET(request: Request, { params }: Context) {
       .order('joined_at', { ascending: true })
       .returns<ParticipantFields[]>(),
     db
+      // `participant_id` never leaves this function. It is read so that who has
+      // answered and how many have answered come out of the same query — see
+      // the comment on `participants` below.
       .from('submissions')
-      .select('busy_mask')
+      .select('participant_id, busy_mask')
       .eq('room_id', room.id)
-      .returns<Array<{ busy_mask: string }>>(),
+      .returns<Array<{ participant_id: string; busy_mask: string }>>(),
   ])
 
   if (people.error || sent.error) {
@@ -100,10 +103,25 @@ export async function GET(request: Request, { params }: Context) {
     return apiError('SERVER_ERROR', 'stored answers do not fit this room’s grid')
   }
 
+  /**
+   * Who has answered, taken from the submissions themselves rather than from
+   * `participants.submitted_at`.
+   *
+   * The two columns are written by two separate statements in `POST /submit`,
+   * and the two tables are read here by two concurrent queries, so a read that
+   * lands between those writes returns a `submittedCount` that includes someone
+   * the members list still calls Waiting — the page then says "2 people have
+   * answered" beside a row reading "Waiting". Observed at roughly one run in
+   * four in `drive-heatmap.mjs`, and reproduced on demand by holding the window
+   * open. Deriving both from this one list makes the disagreement unreachable
+   * rather than unlikely; `submitted_at` stays as the column Realtime watches.
+   */
+  const answered = new Set((sent.data ?? []).map((row) => row.participant_id))
+
   const participants = (people.data ?? []).map((p) => ({
     id: p.id,
     displayName: p.display_name,
-    submitted: p.submitted_at !== null,
+    submitted: answered.has(p.id),
   }))
 
   return NextResponse.json({
