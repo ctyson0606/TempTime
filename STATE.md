@@ -1,7 +1,8 @@
 # STATE
 
-> Last updated: 2026-08-09 (the latency question is closed; the mobile tap
-> failure is now reproducible on demand; `PLAN.md` §11 M2 corrected)
+> Last updated: 2026-08-09 (the mobile tap failure is diagnosed and fixed — it
+> was the probe, not the app; the latency question is closed; nothing is in
+> flight)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -34,11 +35,11 @@ it worked: the answer arrived with no reload, on the socket rather than the
 fallback, within a second or two. That was the last step in the spec that had
 never been executed.
 
-One defect is open and it has changed character: the heatmap's tap readout, which
-failed intermittently and now fails **every time** on the MacBook, making it
-diagnosable for the first time (see Open Questions). The next body of work after
-it is the second-stage connectors, which publishing unblocked — Google's OAuth
-review needs a reachable privacy page, and there now is one.
+The heatmap tap failure, open since 2026-08-02, is closed: it was
+`scripts/drive-mobile.mjs` tapping a placeholder, not a defect in the app (see
+Recent Decisions). Nothing else is open and nothing is in flight. The next body
+of work is the second-stage connectors, which publishing unblocked — Google's
+OAuth review needs a reachable privacy page, and there now is one.
 
 ---
 
@@ -122,7 +123,9 @@ review needs a reachable privacy page, and there now is one.
   `scripts/verify-purge.mjs` (15 assertions over expiry, the credential and the
   cascade), `scripts/verify-headers.mjs` (22 assertions over the CSP and the
   security headers) and `scripts/drive-mobile.mjs` (15 assertions in a phone-sized
-  touch context). They need a server running — `APP_URL=` for the API probes,
+  touch context; it waits for the heatmap's readout element before it taps,
+  because the overlay's own accessible name is also carried by its placeholder —
+  see Recent Decisions). They need a server running — `APP_URL=` for the API probes,
   `BASE_URL=` for the browser ones, and `verify-rls.mjs` needs neither because it
   talks to Supabase directly. `verify-headers.mjs` is the one that needs a
   **production** build rather than the dev server, since development relaxes the
@@ -208,18 +211,12 @@ review needs a reachable privacy page, and there now is one.
 
 ## Next Steps
 
-1. Diagnose the heatmap tap readout while it is reproducible. It fails on every
-   run on the MacBook, which is the first time it has been available on demand,
-   and the established fact to start from is that the event reaches the right
-   cell while React's own `onPointerDown` never runs (see Open Questions). If the
-   MacBook stops reproducing it, this drops back to being a rate to measure
-   rather than a bug to chase.
-2. Apply for the slow OAuth access now, before writing any of it. Google's
+1. Apply for the slow OAuth access now, before writing any of it. Google's
    sensitive-scope review and TickTick's API application are queues measured in
    weeks of somebody else's time, and Google's precondition — a reachable
    privacy page — is satisfied as of 2026-08-05. Applying first turns the wait
    into the development window instead of a gap after it.
-3. Then the second-stage connectors, in the order `PLAN.md` §8.2 argues for:
+2. Then the second-stage connectors, in the order `PLAN.md` §8.2 argues for:
    Todoist first because it needs nothing but OAuth, Google next because its
    sensitive-scope review is a queue rather than a build, TickTick last because
    its API application has no predictable timeline. Apply for the slow ones early
@@ -227,7 +224,7 @@ review needs a reachable privacy page, and there now is one.
    there is no account system, so where an OAuth refresh token would live has to
    be decided rather than assumed. Keeping it in the tab, and never on the
    server, is the answer consistent with `PLAN.md` §2.1.
-4. Optional, and only inside a one-hour window: watch one *scheduled* purge fire.
+3. Optional, and only inside a one-hour window: watch one *scheduled* purge fire.
    The credential question is answered — see Done — but by a manual Run rather
    than by the scheduler. The remaining gap can only be closed by being present
    while the evidence exists: the job fires between 04:00 and 04:59 UTC, and this
@@ -250,28 +247,6 @@ review needs a reachable privacy page, and there now is one.
   proposed. Worth remembering rather than chasing: if it returns, this is the
   paragraph that says it has happened before, and the polling fallback is what
   keeps the room working while it is diagnosed.
-- **Why does the heatmap's tap handler not run?** Still unexplained, but no
-  longer intermittent everywhere: `scripts/drive-mobile.mjs` fails its readout
-  assertion **4 times out of 4 on the MacBook** and roughly 1 in 2 on the
-  Windows machine, with every other assertion passing on every run. That is the
-  first reproduction available on demand, and it is the reason to chase this now.
-  Read the rate with its confound attached: the MacBook had just installed a
-  newer Chromium than the Windows figures were taken on, because the driver pins
-  its browser build to the library version, so "different machine" and
-  "different browser" moved together (METHOD.md → Verification). The feature
-  files (`Heatmap.tsx`, `SlotGrid.tsx`) are byte-identical to the version that
-  passed on 2026-08-02, in a production build as well as in development, so this
-  is not a consequence of the free-time flip. What was established: the tap
-  coordinate is the same on passing and failing runs, the cell under it is the
-  right one, and a native `pointerdown` listener sees the event arrive on that
-  cell — while `Heatmap`'s own `onPointerDown` is never called at all. Ruled out:
-  a stale coordinate (the box is sampled until it stops moving), the
-  `pointerleave` clear path (removing it changes nothing), and a zero-length tap
-  (60ms behaves the same). Do **not** make the probe wait longer: there is no
-  handler run to wait for. A real finger has never been observed to miss, so
-  whether this is an app defect or a CDP-dispatch artefact is itself open — and
-  a first cheap step is to check whether a real Chromium under a real touch
-  device reproduces what CDP does.
 - **How should the scale read with very few submitters?** With two people the
   levels in use are the third and the fifth, so "one of two is free" already looks
   fairly strong. It is legible and nobody has complained; whether it should
@@ -306,6 +281,23 @@ review needs a reachable privacy page, and there now is one.
 
 ## Recent Decisions
 
+- **2026-08-09 — The heatmap tap failure was the probe, and the fix is one wait
+  rather than any change to the app.** `Heatmap` renders its grid in both states,
+  and the placeholder — `role="group"`, `aria-label="Everyone's free time"`, the
+  same `data-slot` cells — carries no pointer handlers and no readout. Sending
+  returns before the overlay has re-read `/heatmap`, so waiting for that group
+  proved only that the page had rendered; the probe then measured a cell on the
+  inert copy and tapped it. Instrumented, the tap dispatches normally, reaches
+  `document`, and `elementFromPoint` resolves to the right cell — while the
+  readout element does not exist at that moment and "Nobody has sent their times
+  yet" is on the page. The machine difference was the round trip to Tokyo, 0.8s
+  here against 0.52s on Windows, deciding whether the fetch had landed; the
+  Chromium version the two machines disagreed on was irrelevant. `drive-mobile.mjs`
+  now waits for `[data-readout]`, which only the loaded state renders. Proven both
+  ways: five consecutive passes with the wait, three consecutive failures with it
+  removed. The app is unchanged on purpose — a real finger has never missed,
+  because a person taps a grid they can see has answers in it. The general rules
+  are in METHOD.md → Verification.
 - **2026-08-09 — The live-update latency question is closed as measured, and the
   London routing is deliberately not chased.** Two figures now exist against the
   deployment from two machines — 806ms and 1809ms — and both are inside the

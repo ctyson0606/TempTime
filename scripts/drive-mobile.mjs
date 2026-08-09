@@ -284,6 +284,15 @@ try {
   // --- the heatmap ----------------------------------------------------------
   const overlay = page.getByRole('group', { name: "Everyone's free time" })
   await overlay.waitFor({ timeout: 15000 })
+  // Waiting for that group proves nothing on its own. `Heatmap` draws the same
+  // grid — same role, same accessible name, same `data-slot` cells — while it
+  // is still showing "nobody has answered yet", and that placeholder carries no
+  // pointer handlers and no readout. Sending returns before the overlay has
+  // re-read `/heatmap`, so a probe that measures a cell here is measuring an
+  // inert copy, and the tap below lands on it and does nothing. The readout
+  // element only exists once a submitter has arrived, so it is the evidence
+  // that the data landed rather than that the page did.
+  await page.locator('[data-readout]').waitFor({ timeout: 15000 })
   await overlay.scrollIntoViewIfNeeded()
   await page.waitForTimeout(400)
 

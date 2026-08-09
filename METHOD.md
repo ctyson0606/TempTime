@@ -99,6 +99,13 @@ whose blast radius is the assertion you are testing, move it somewhere with
 fewer neighbours if it is not, and treat "the run died first" as a result that
 has not answered the question.
 
+A run can also die on the project's own defences. Three control runs aborted at
+room creation rather than reaching the assertion under test, because repeated
+probing had used up a rate limit — a result that looks like the sabotage working
+and is not. The limiter counts in memory, so restarting the dev server clears it;
+whatever the mechanism, check that the harness is not the thing that failed
+before reading anything into a control.
+
 **A probe whose outcomes cannot differ proves nothing.** Confirming a credential
 by watching a request fail says only that something failed. Two rounds were lost
 this way: a JWT secret was tested against an endpoint that rejects every
@@ -257,6 +264,30 @@ passed had the readout never rendered at all; and a coordinate measured on a pag
 that updates itself is stale by the time it is used, so wait for the page to
 settle and then ask what is actually under the point before dispatching to it.
 
+**The waiting trap has a sharper form: the thing you waited for exists in both
+states.** "Wait for the data, not the page" is not enough when the empty state
+renders the *same shell* as the loaded one. `Heatmap` draws its grid either way —
+same `role="group"`, same `aria-label`, same `data-slot` cells — and the
+placeholder version carries no pointer handlers and no readout. A probe that
+waited for that group was satisfied by an inert copy, measured a cell on it, and
+tapped something that could not respond; five days of "the handler never runs"
+followed, all of it true and none of it a bug. Wait for something **only the
+loaded state can produce** — here the readout element, which does not exist until
+a submitter has arrived. Then ask, of any empty state you write: is there
+anything on screen that tells it apart from the real thing? If not, that is the
+same defect for a screen reader as it was for the probe.
+
+Two corollaries, both of which cost this investigation time. **"The handler never
+ran" has a boring explanation before it has an interesting one** — the element
+under the pointer may belong to a different render branch of the same component,
+so establish *which* variant is mounted before suspecting the framework or the
+input layer. And **a rate that differs between two machines may be caused by
+neither of them**: the difference here was the round trip to a shared database,
+0.52s from one machine and 0.8s from the other, which decided whether the fetch
+had landed by the time the probe tapped. The browser build the two machines
+disagreed on turned out to be irrelevant — which is exactly why a confound gets
+*named* beside the number rather than concluded from.
+
 That last one is the one that bites hardest, because it does not fail every time.
 A room page whose badge and member list fill in asynchronously shifts everything
 below them; a probe that measured a cell, then touched those coordinates a moment
@@ -400,7 +431,11 @@ Update semantics:
   every attribute their cells carry. Give each an accessible name (`role="group"`
   with `aria-label`): a screen reader needs it, and it is also the only stable way
   to select one of them. Adding the second is what breaks the first one's tests,
-  so name both at the moment the second appears.
+  so name both at the moment the second appears. The same problem arrives a
+  second way and is harder to see: one component in two *states* — loaded and
+  empty — that render the same shell under the same name is equally
+  indistinguishable, to a reader and to anything selecting by role. See
+  Verification.
 - **A connection that reports success has proved the handshake, not the
   delivery.** A Supabase channel returns `SUBSCRIBED` on the strength of the join
   alone; whether any event then arrives depends on the RLS policy the socket's
