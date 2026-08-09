@@ -111,6 +111,10 @@ try {
   await join(a, code, 'Alice')
 
   const heatGrid = a.getByRole('group', { name: "Everyone's free time" })
+  // The empty state draws the same grid under a different name, on purpose: the
+  // two share a role and their cells share every attribute, so one name would
+  // make them indistinguishable to a screen reader and to this script.
+  const emptyGrid = a.getByRole('group', { name: 'Results, no answers yet' })
   const painter = a.getByRole('group', { name: 'Your free times' })
 
   // The results arrive from GET /heatmap, so they are a fetch behind the join.
@@ -119,8 +123,14 @@ try {
 
   // --- the empty state -----------------------------------------------------
   report(
-    (await heatGrid.count()) === 1,
+    (await emptyGrid.count()) === 1,
     'the results grid is drawn as soon as a member is in the room',
+  )
+  // The two names are what stops a probe from tapping the inert grid and
+  // reporting the live one as broken, so assert they do not both answer.
+  report(
+    (await heatGrid.count()) === 0,
+    "and the empty grid does not answer to the live overlay's name",
   )
   report(true, 'with no answers the overlay says so instead of colouring zeroes')
   report(
@@ -129,8 +139,10 @@ try {
   )
 
   // Anchor: the grid really is full of cells, so a later count of zero means
-  // "none are coloured" rather than "the selector missed".
-  const cells = await heatGrid.locator('[data-slot]').count()
+  // "none are coloured" rather than "the selector missed". Read off the empty
+  // grid because that is the one on screen here; the cell count is a property
+  // of the room and does not change when the overlay fills in.
+  const cells = await emptyGrid.locator('[data-slot]').count()
   report(cells > 0, 'the results grid has cells to colour', `${cells} cells`)
 
   /** Every cell's computed background, in slot order. Compared, never parsed. */
@@ -149,9 +161,9 @@ try {
   }
 
   report(
-    (await histogram(heatGrid)).join() === String(cells),
+    (await histogram(emptyGrid)).join() === String(cells),
     'before anyone answers every cell is the same colour',
-    (await histogram(heatGrid)).join(),
+    (await histogram(emptyGrid)).join(),
   )
 
   // --- Alice answers -------------------------------------------------------

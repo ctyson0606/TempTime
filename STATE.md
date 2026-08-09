@@ -1,8 +1,7 @@
 # STATE
 
-> Last updated: 2026-08-09 (the mobile tap failure is diagnosed and fixed — it
-> was the probe, not the app; the latency question is closed; nothing is in
-> flight)
+> Last updated: 2026-08-10 (the heatmap's empty state now has a name of its own;
+> one pre-existing intermittent failure was measured and is open)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -36,10 +35,13 @@ fallback, within a second or two. That was the last step in the spec that had
 never been executed.
 
 The heatmap tap failure, open since 2026-08-02, is closed: it was
-`scripts/drive-mobile.mjs` tapping a placeholder, not a defect in the app (see
-Recent Decisions). Nothing else is open and nothing is in flight. The next body
-of work is the second-stage connectors, which publishing unblocked — Google's
-OAuth review needs a reachable privacy page, and there now is one.
+`scripts/drive-mobile.mjs` tapping a placeholder, not a defect in the app, and
+the placeholder now carries a name of its own so the two grids cannot be
+confused again (see Recent Decisions). Chasing it surfaced one unrelated
+intermittent failure that had never been measured; it is in Open Questions and
+nothing else is in flight. The next body of work is the second-stage connectors,
+which publishing unblocked — Google's OAuth review needs a reachable privacy
+page, and there now is one.
 
 ---
 
@@ -118,8 +120,9 @@ OAuth review needs a reachable privacy page, and there now is one.
   four absence notices and the three one-shot painter actions),
   `scripts/verify-heatmap.mjs`
   (19 assertions over the overlay API, its privacy and its authorisation),
-  `scripts/drive-heatmap.mjs` (the M3 acceptance test, 27 assertions in two
-  contexts, covering both the socket and the fallback),
+  `scripts/drive-heatmap.mjs` (the M3 acceptance test, 28 assertions in two
+  contexts, covering both the socket and the fallback, and that the empty
+  overlay does not answer to the live one's accessible name),
   `scripts/verify-purge.mjs` (15 assertions over expiry, the credential and the
   cascade), `scripts/verify-headers.mjs` (22 assertions over the CSP and the
   security headers) and `scripts/drive-mobile.mjs` (15 assertions in a phone-sized
@@ -247,6 +250,19 @@ OAuth review needs a reachable privacy page, and there now is one.
   proposed. Worth remembering rather than chasing: if it returns, this is the
   paragraph that says it has happened before, and the polling fallback is what
   keeps the room working while it is diagnosed.
+- **Why does Bob's member list sometimes show one "Sent" when the readout
+  already says two people have answered?** `scripts/drive-heatmap.mjs` fails
+  that one assertion at roughly one run in four, on the local dev server; every
+  other assertion passes. Measured on both trees before it was written down —
+  1 in 4 on the untouched tree and 2 in 5 while the empty-grid rename was in
+  progress, which is the same rate inside the noise, so it is pre-existing and
+  the rename did not cause it. What makes it worth a look rather than a shrug:
+  the member list and the readout are rendered from *the same* `/heatmap`
+  response, `heatmap.participants` and `heatmap.submittedCount`, so a render in
+  which they disagree should not be reachable. Either the two are not as
+  coupled as they look, or the endpoint can answer with a `submitted_at` that
+  has not caught up with its own count. Start by asking which, on the server,
+  before touching the probe.
 - **How should the scale read with very few submitters?** With two people the
   levels in use are the third and the fifth, so "one of two is free" already looks
   fairly strong. It is legible and nobody has complained; whether it should
@@ -281,6 +297,20 @@ OAuth review needs a reachable privacy page, and there now is one.
 
 ## Recent Decisions
 
+- **2026-08-10 — The heatmap's empty state gets an accessible name of its own,
+  sharing no words with the live one.** It is `Results, no answers yet` against
+  `Everyone's free time`. Adding to the live name rather than replacing it was
+  rejected outright: role-name matching is substring-based, so
+  `Everyone's free time (nothing yet)` would still answer to a search for the
+  live name and would have fixed nothing. This closes the app-side half of the
+  tap failure — the probe-side half was fixed the day before — and it is a real
+  accessibility fix rather than a test convenience, because a screen reader
+  announced an inert grid and a live one identically. `drive-heatmap.mjs` gains
+  the assertion that the empty grid does **not** answer to the live name, which
+  is what stops the two drifting back together. Its cell-count anchor moved to
+  the empty grid at the same time and caught the omission on the first run,
+  which is the whole reason that anchor exists. The general rule is in
+  METHOD.md → Conventions.
 - **2026-08-09 — The heatmap tap failure was the probe, and the fix is one wait
   rather than any change to the app.** `Heatmap` renders its grid in both states,
   and the placeholder — `role="group"`, `aria-label="Everyone's free time"`, the

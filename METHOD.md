@@ -140,6 +140,14 @@ down as fixed; four more runs put it back at roughly one failure in two, with th
 a count before and after — three or four runs each — and the comparison is
 between rates, not between outcomes.
 
+**A flake that surfaces next to your change is not evidence your change made
+it.** An unrelated assertion started failing about twice in five runs during an
+edit, which is exactly the shape of something newly broken. Stashing the edit and
+running the untouched tree four times put it at one in four — the same rate
+inside the noise these sample sizes carry — so it was pre-existing and merely
+never measured. The check costs one stash and a handful of runs, and without it
+the honest options are to blame your own change or to say nothing, both wrong.
+
 The other half of that rule: **an added probe is part of the experiment.** The
 same failure disappeared whenever the instrumentation for diagnosing it was
 present, because each extra round trip into the page changed the timing. Compare
@@ -435,7 +443,12 @@ Update semantics:
   second way and is harder to see: one component in two *states* — loaded and
   empty — that render the same shell under the same name is equally
   indistinguishable, to a reader and to anything selecting by role. See
-  Verification.
+  Verification. When splitting a name, share no words with the one it is
+  splitting from: role-name matching is substring-based by default, so
+  `"X (nothing yet)"` still answers to a search for `"X"` and buys nothing. The
+  empty overlay here is `Results, no answers yet` against the live
+  `Everyone's free time`, and a probe asserts that the first does **not** answer
+  to the second's name.
 - **A connection that reports success has proved the handshake, not the
   delivery.** A Supabase channel returns `SUBSCRIBED` on the strength of the join
   alone; whether any event then arrives depends on the RLS policy the socket's

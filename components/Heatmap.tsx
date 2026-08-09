@@ -47,9 +47,18 @@ export default function Heatmap({
   if (submittedCount === 0) {
     // All-zero counts drawn literally are indistinguishable from "everyone is
     // busy the whole time", which is the opposite of what no answers means.
+    //
+    // Named differently from the overlay below, and deliberately sharing no
+    // words with it. This grid has the same role, the same cells and none of
+    // the behaviour: no pointer handlers, no readout. Under one name a screen
+    // reader announces the two identically, and anything selecting by role
+    // cannot tell which one it found — which is how a probe came to tap this
+    // one for five days and report the readout as broken. A name that merely
+    // *added* to the other would be no better, because a substring match finds
+    // both.
     return (
       <div className="flex flex-col gap-3">
-        <SlotGrid room={room} size={size} label="Everyone's free time" />
+        <SlotGrid room={room} size={size} label="Results, no answers yet" />
         <p className="border-t border-zinc-200 pt-3 text-xs text-zinc-500 dark:border-zinc-800">
           Nobody has sent their times yet. As people answer, the times that suit
           everyone fill in here.
