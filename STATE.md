@@ -1,7 +1,7 @@
 # STATE
 
-> Last updated: 2026-08-08 (development now runs on two machines, verified on
-> both; the README is translated; nothing is in flight)
+> Last updated: 2026-08-09 (the latency question is closed; the mobile tap
+> failure is now reproducible on demand; `PLAN.md` §11 M2 corrected)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -18,25 +18,27 @@ free, and an import can only subtract from it (`PLAN.md` §3.4, §10, §14, and 
 Recent Decisions below). All of it is committed, pushed, and verified against the
 deployment rather than only against a laptop.
 
-Two of the three questions that could only be answered by publishing are
-answered. The nonce CSP does survive a CDN in front of it — the pages hydrate
-online, which is not something a screenshot or a 200 could ever have shown. The
-daily purge route works end to end, and the provider's own invoker does
-authenticate against it — a manual run on 2026-08-07 returned `GET 200`. What
-remains unobserved is narrower than it was: the *scheduled* firing, as opposed to
-a manual one (see Next Steps). The third, the live-update latency, is better
-understood than it was and still not a clean number: the network path out of the
-Windows machine, where every figure so far was taken, inflates all of them (see
-Open Questions).
+All three questions that could only be answered by publishing are now closed. The
+nonce CSP does survive a CDN in front of it — the pages hydrate online, which is
+not something a screenshot or a 200 could ever have shown. The daily purge route
+works end to end, and the provider's own invoker does authenticate against it — a
+manual run on 2026-08-07 returned `GET 200`; only the *scheduled* firing, as
+opposed to a manual one, is still unobserved (see Next Steps). The live-update
+latency is closed as measured rather than solved: 806ms from one machine and
+1809ms from the other, both inside the two-second target, and the remaining
+variation is the measuring machine's route rather than the application (see
+Recent Decisions).
 
 `PLAN.md` §12 has been run with a real second person on a different machine, and
 it worked: the answer arrived with no reload, on the socket rather than the
 fallback, within a second or two. That was the last step in the spec that had
 never been executed.
 
-So nothing is in flight. The next body of work is the second-stage connectors,
-which publishing unblocked — Google's OAuth review needs a reachable privacy
-page, and there now is one.
+One defect is open and it has changed character: the heatmap's tap readout, which
+failed intermittently and now fails **every time** on the MacBook, making it
+diagnosable for the first time (see Open Questions). The next body of work after
+it is the second-stage connectors, which publishing unblocked — Google's OAuth
+review needs a reachable privacy page, and there now is one.
 
 ---
 
@@ -115,11 +117,11 @@ page, and there now is one.
   four absence notices and the three one-shot painter actions),
   `scripts/verify-heatmap.mjs`
   (19 assertions over the overlay API, its privacy and its authorisation),
-  `scripts/drive-heatmap.mjs` (the M3 acceptance test, 28 assertions in two
+  `scripts/drive-heatmap.mjs` (the M3 acceptance test, 27 assertions in two
   contexts, covering both the socket and the fallback),
   `scripts/verify-purge.mjs` (15 assertions over expiry, the credential and the
   cascade), `scripts/verify-headers.mjs` (22 assertions over the CSP and the
-  security headers) and `scripts/drive-mobile.mjs` (16 assertions in a phone-sized
+  security headers) and `scripts/drive-mobile.mjs` (15 assertions in a phone-sized
   touch context). They need a server running — `APP_URL=` for the API probes,
   `BASE_URL=` for the browser ones, and `verify-rls.mjs` needs neither because it
   talks to Supabase directly. `verify-headers.mjs` is the one that needs a
@@ -137,7 +139,12 @@ page, and there now is one.
   clone brings. Verified there on 2026-08-08 in three widening steps: 236 tests
   (code and dependencies), `verify-rls.mjs` 9/9 (four of the five credentials,
   and the RLS guarantees on the live database), and a room created through the
-  dev server (the whole path). `CRON_SECRET` is the one variable nothing has
+  dev server (the whole path). On 2026-08-09 the browser scripts joined that
+  list: `drive-mobile.mjs` against the local dev server and `drive-heatmap.mjs`
+  against the deployment. `npx playwright install chromium` had to be run a
+  second time first — the lockfile repair moved the library, and its pinned
+  browser build moved with it, so four runs died before any assertion.
+  `CRON_SECRET` is the one variable nothing has
   exercised there; it is needed only by `verify-purge.mjs`, and a wrong value
   fails loudly as a 401.
 - Deployed on Vercel (Hobby, team `ctyson`, project `temp-time`). Functions are
@@ -147,8 +154,10 @@ page, and there now is one.
   Development and production share one Supabase project.
 - The deployment is verified, not assumed, and the run that counts is the one
   taken **after** the free-time flip: against `https://temp-time.vercel.app`,
-  `drive-ui.mjs` 25/25 and `drive-heatmap.mjs` 28/28 including both transports,
-  with the live update at 806ms. `verify-headers.mjs` 22/22 was taken before the
+  `drive-ui.mjs` 25/25 and `drive-heatmap.mjs` 27/27 including both transports,
+  with the live update at 806ms; re-run from the MacBook on 2026-08-09, 27/27
+  again with the live update at 1809ms and the fallback at 3326ms.
+  `verify-headers.mjs` 22/22 was taken before the
   flip and nothing it covers changed. `drive-ui.mjs` is the one that mattered —
   dragging, sending and deleting are impossible on a page that has not hydrated,
   so passing them is the proof that the nonce CSP works behind a CDN. The purge
@@ -176,11 +185,15 @@ page, and there now is one.
   `subtractMask` is how an import lands. `ManualPainter` carries Select all,
   Invert and Clear all; there is no busy/free mode. The draft key moved from
   `temptime:draft:` to `temptime:free:` so a pre-flip draft cannot be read
-  inverted. All four driver scripts were swept for the painter's accessible name
+  inverted. All three driver scripts were swept for the painter's accessible name
   and every one of them now asks for `Your free times`; `drive-heatmap.mjs`
   needed more than the label, because which slots suit whom inverted with it.
 - Milestone coverage: `PLAN.md` §11 holds the per-item state; do not duplicate it
-  here. M1 through M4 are all complete, acceptance tests included.
+  here. M1 through M4 are all complete, acceptance tests included. The six
+  free-time items added to M2 on 2026-08-05 had been left unticked there while
+  this file called the flip finished, so §11 was the one per-item record and it
+  was wrong in the "not done" direction; corrected on 2026-08-09 after checking
+  each of the six against the code rather than against this file.
 
 **In Progress**
 - Nothing. The repository, the deployment and this file agree.
@@ -195,12 +208,18 @@ page, and there now is one.
 
 ## Next Steps
 
-1. Apply for the slow OAuth access now, before writing any of it. Google's
+1. Diagnose the heatmap tap readout while it is reproducible. It fails on every
+   run on the MacBook, which is the first time it has been available on demand,
+   and the established fact to start from is that the event reaches the right
+   cell while React's own `onPointerDown` never runs (see Open Questions). If the
+   MacBook stops reproducing it, this drops back to being a rate to measure
+   rather than a bug to chase.
+2. Apply for the slow OAuth access now, before writing any of it. Google's
    sensitive-scope review and TickTick's API application are queues measured in
    weeks of somebody else's time, and Google's precondition — a reachable
    privacy page — is satisfied as of 2026-08-05. Applying first turns the wait
    into the development window instead of a gap after it.
-2. Then the second-stage connectors, in the order `PLAN.md` §8.2 argues for:
+3. Then the second-stage connectors, in the order `PLAN.md` §8.2 argues for:
    Todoist first because it needs nothing but OAuth, Google next because its
    sensitive-scope review is a queue rather than a build, TickTick last because
    its API application has no predictable timeline. Apply for the slow ones early
@@ -208,7 +227,7 @@ page, and there now is one.
    there is no account system, so where an OAuth refresh token would live has to
    be decided rather than assumed. Keeping it in the tab, and never on the
    server, is the answer consistent with `PLAN.md` §2.1.
-3. Optional, and only inside a one-hour window: watch one *scheduled* purge fire.
+4. Optional, and only inside a one-hour window: watch one *scheduled* purge fire.
    The credential question is answered — see Done — but by a manual Run rather
    than by the scheduler. The remaining gap can only be closed by being present
    while the evidence exists: the job fires between 04:00 and 04:59 UTC, and this
@@ -223,50 +242,36 @@ page, and there now is one.
 
 ## Open Questions
 
-- **Why did the first ever subscription deliver nothing?** Unexplained, and the
-  only genuinely open item here. The channel reported `SUBSCRIBED` and no event
+- **Why did the first ever subscription deliver nothing?** Unexplained, and not
+  currently reproducible. The channel reported `SUBSCRIBED` and no event
   ever arrived; a plausible cause was found, fixed, and then disproved by putting
   it back and watching three runs pass anyway. It has not recurred in a dozen runs
   since. A cold Realtime service fits the evidence better than anything else
   proposed. Worth remembering rather than chasing: if it returns, this is the
   paragraph that says it has happened before, and the polling fallback is what
   keeps the room working while it is diagnosed.
-- **Why does the heatmap's tap handler not run about half the time?**
-  `scripts/drive-mobile.mjs` fails its readout assertion on roughly one run in
-  two, in a production build as well as in development, and the feature files
-  (`Heatmap.tsx`, `SlotGrid.tsx`) are byte-identical to the version that passed
-  on 2026-08-02 — this is not a consequence of the free-time flip. What was
-  established: the tap coordinate is the same on passing and failing runs, the
-  cell under it is the right one, and a native `pointerdown` listener sees the
-  event arrive on that cell — while `Heatmap`'s own `onPointerDown` is never
-  called at all. Ruled out: a stale coordinate (the box is sampled until it stops
-  moving), the `pointerleave` clear path (removing it changes nothing), and a
-  zero-length tap (60ms behaves the same). Do **not** make the probe wait longer:
-  there is no handler run to wait for. The feature works when it works, and a
-  real finger has never been observed to miss. One cheap experiment has become
-  available and has not been run: the same script on the MacBook. Every
-  observation so far comes from one machine, so a failure rate that differs there
-  would separate the code from the environment in a way nothing tried yet can.
-  Measure the rate over three or four runs on each, never one run against one.
-- **What is the live-update latency in production?** Better understood than it
-  was, and still not a clean number. Two measurements exist against the
-  deployment: 1843ms before the free-time flip and **806ms after it**, both from
-  the Windows machine, both inside the two-second target. The second one is what forced
-  a correction: 806ms is *faster* than the "transport floor" of ~2s recorded
-  earlier, which is impossible, and the explanation is that the floor had been
-  measured with a cold `curl` — DNS, TCP and TLS on every sample. Over a reused
-  connection that machine's per-request cost is **0.52s**, and the app holds warm
-  connections and an open socket. So the honest reading is that a live update
-  costs roughly one warm round trip plus the `/heatmap` refetch, and that its
-  route still inflates the figure: the traffic enters Vercel in London
-  (`x-vercel-id` reads `lhr1::hnd1::…`) and pays about 280ms of TCP handshake to
-  Tokyo. A figure from a normal Asian network is still worth taking; a second
-  person on their own machine perceived "a second or two" on 2026-08-05
-  (`PLAN.md` §12) but nobody timed it. The MacBook is now the cheapest way to get
-  that second vantage point, and its edge code has never been read. The general
-  rule, including the mistake, is in METHOD.md → Verification. Before trusting
-  any figure from either machine: check the edge code in `x-vercel-id`, and time
-  the *second* request on a connection rather than the first.
+- **Why does the heatmap's tap handler not run?** Still unexplained, but no
+  longer intermittent everywhere: `scripts/drive-mobile.mjs` fails its readout
+  assertion **4 times out of 4 on the MacBook** and roughly 1 in 2 on the
+  Windows machine, with every other assertion passing on every run. That is the
+  first reproduction available on demand, and it is the reason to chase this now.
+  Read the rate with its confound attached: the MacBook had just installed a
+  newer Chromium than the Windows figures were taken on, because the driver pins
+  its browser build to the library version, so "different machine" and
+  "different browser" moved together (METHOD.md → Verification). The feature
+  files (`Heatmap.tsx`, `SlotGrid.tsx`) are byte-identical to the version that
+  passed on 2026-08-02, in a production build as well as in development, so this
+  is not a consequence of the free-time flip. What was established: the tap
+  coordinate is the same on passing and failing runs, the cell under it is the
+  right one, and a native `pointerdown` listener sees the event arrive on that
+  cell — while `Heatmap`'s own `onPointerDown` is never called at all. Ruled out:
+  a stale coordinate (the box is sampled until it stops moving), the
+  `pointerleave` clear path (removing it changes nothing), and a zero-length tap
+  (60ms behaves the same). Do **not** make the probe wait longer: there is no
+  handler run to wait for. A real finger has never been observed to miss, so
+  whether this is an app defect or a CDP-dispatch artefact is itself open — and
+  a first cheap step is to check whether a real Chromium under a real touch
+  device reproduces what CDP does.
 - **How should the scale read with very few submitters?** With two people the
   levels in use are the third and the fifth, so "one of two is free" already looks
   fairly strong. It is legible and nobody has complained; whether it should
@@ -293,14 +298,40 @@ page, and there now is one.
   patch.
 - The grid card sizes itself to its widest child, so opening the privacy
   checklist widens the card and the grid looks off-centre until it closes.
-- The busy-slot count under the grid updates on release, not during a drag. The
-  cell colours already preview the change; a count that jumps while dragging was
-  judged noisier than useful.
+- The count under the grid — "N of M slots marked free" — updates on release,
+  not during a drag. The cell colours already preview the change; a count that
+  jumps while dragging was judged noisier than useful.
 
 ---
 
 ## Recent Decisions
 
+- **2026-08-09 — The live-update latency question is closed as measured, and the
+  London routing is deliberately not chased.** Two figures now exist against the
+  deployment from two machines — 806ms and 1809ms — and both are inside the
+  two-second target, which is what the target was for. The gap between them is
+  the measuring machine, not the application: on the MacBook, over one warm
+  connection, a CDN-cached static asset costs 0.27–0.36s while a dynamic 404 that
+  reaches the function in Tokyo costs 0.64–1.15s, so a live update is about one
+  function-tier round trip plus the `/heatmap` refetch. The one thing that did
+  change: `x-vercel-id` reads `lhr1::hnd1::…` from **both** machines, so entering
+  Vercel's network in London is a property of this network path rather than of
+  the Windows machine, which is how the earlier note read it. The user's call was
+  not to pursue it — nothing in the codebase can move where a request enters a
+  CDN, and the number it produces is already inside target. Reopen only if a
+  figure from somewhere else lands outside two seconds. The general rules, both
+  the cold-floor mistake and the one-floor-per-tier correction, are in METHOD.md
+  → Verification.
+- **2026-08-09 — `PLAN.md` §11 M2 is corrected rather than left to the reader.**
+  The six free-time items added on 2026-08-05 were still unticked four days after
+  they shipped and were verified. This file explicitly delegates per-item
+  milestone state to §11, so §11 was the only record and it said the work was not
+  done. Each item was checked against the code before ticking — the painter's
+  three one-shot actions, `invertMask` at the two conversion points,
+  `subtractMask` on import, the disabled send with its explanation, and the copy
+  sweep — and a `目前狀態` paragraph now names `drive-ui.mjs` as what executes the
+  added acceptance, including why clearing the local draft before the reload is
+  the step that gives it any power.
 - **2026-08-08 — The README is translated into both Chinese scripts, and the
   language rule gains its first exception.** Asked for directly by the user. The
   English-only rule was written for working output — memory, specs, comments,

@@ -139,6 +139,16 @@ present, because each extra round trip into the page changed the timing. Compare
 runs whose instrumentation is identical, and be suspicious of a bug that only
 survives when nobody is looking at it.
 
+**So is the driver's own version, and that one is invisible in the diff.** The
+same script, unmodified, failed 4 out of 4 on a second machine where the first
+had been failing about 1 in 2 — a difference worth acting on, except that the
+second machine had just installed a newer browser build, because the driver pins
+its download to the library version and the library had moved. Two variables
+changed at once and only one of them is visible in the working tree. A
+cross-machine rate is not a clean comparison until the toolchain versions are
+compared too: either match them, or name the confound beside the number rather
+than reporting the rate as though the machine were the only difference.
+
 **An observation window has to outlast the event it is meant to observe, and
 that is a property of the platform rather than of the plan.** A step written as
 "check the dashboard once and confirm the scheduler authenticated" turned out
@@ -215,6 +225,19 @@ the application does not do. Send several requests over one connection and take
 the later ones. A floor measured cold does not overstate the latency a little; it
 overstates it by however long a handshake takes, which on a bad route is most of
 the number.
+
+(One trap in taking that measurement: `curl` given several URLs on one command
+line applies each `-o` to one URL, so a single `-o /dev/null` discards the first
+response and prints the rest as a body. The first attempt here reported one cold
+sample and looked like six.)
+
+**And there is not one floor — there is one per tier the request reaches.** From
+one machine over one warm connection, a CDN-cached static asset came back in
+0.27–0.36s while a dynamic 404 that runs a function in another continent took
+0.64–1.15s. Both are honest floors; they answer different questions. Take the
+one whose request travels as far as the thing being measured, because a floor
+taken at the edge makes everything behind the edge look like the application's
+own cost.
 
 **UI is verified by driving it, not by reading it.** A component that type-checks
 and builds has been proven to compile, nothing more. Drive the running app in a
@@ -447,6 +470,14 @@ Update semantics:
   dependency is added and installed on only one machine, and the repaired
   lockfile is proven only by running `npm ci` on the *other* platform — the one
   whose behaviour the edit put at risk, and the one that cannot report on itself.
+- **A driver's browser download is pinned to the driver's version, so installing
+  it is not one-time setup.** Playwright fetches a specific build number and
+  refuses to launch anything else: after a library bump arrived through a
+  lockfile repair, four consecutive runs died before a single assertion with
+  `Executable doesn't exist … chromium_headless_shell-1234`, which reads as a
+  broken machine rather than a stale download. Re-run `npx playwright install
+  chromium` whenever the library version moves, not only on a new machine — and
+  see Verification on what that bump does to a comparison between two machines.
 
 ---
 
