@@ -334,6 +334,16 @@ buttons already are" is a rule this design can be held to and can argue about;
 never bothered anyone, and is the kind of number that gets loosened the first
 time it is inconvenient.
 
+**Fixtures you wrote share your assumptions; one real file does not.** Asked why
+an import did nothing, the first move was seven synthetic `.ics` cases covering
+every shape that seemed to matter — weekly rules, floating times, Outlook zone
+names, one-off weeks, junk input. All seven passed, and the conclusion drawn was
+"the parser is fine, the problem is elsewhere". The user's actual export then
+threw on its first line of recurrence, on a property none of the seven had used,
+because the fixtures were written by the same head that wrote the parser. A
+synthetic suite proves the cases you thought of. Ask for one real artefact
+before concluding anything about the ones you did not.
+
 **A translation is verified on what gets copied out of it, not on how it reads.**
 The prose can be clumsy and still work; a command that got translated along with
 the sentence around it cannot, and the reader will paste it without suspecting
@@ -535,6 +545,24 @@ Update semantics:
   malformed secret is our deployment problem: throw at the call site so it
   surfaces on the first request instead of degrading into blanket 401s that look
   like users mistyping.
+
+  A function that promises a result type has to keep that promise on **every**
+  path, including the ones inside somebody else's library. `parseIcs` returns
+  `{ ok: false }` for a malformed file — but only the first parse was guarded,
+  and recurrence expansion reached into ical.js, which throws on values it will
+  not decode. Guard per record rather than per file, so one bad entry costs one
+  entry: a real university export got a single property wrong and took every
+  other event in the file with it. And note where the throw went — the caller was
+  `void read(file)`, so it rejected a promise nobody awaited and *nothing at all*
+  appeared on screen. Any `void`-ed async call needs its own catch, because the
+  screen is the only place the user finds out anything happened.
+
+- **Every input record leaves a trace: a result, or a reason there is none.** An
+  import that returns no events and no explanations is indistinguishable from an
+  empty file, and the honest cases are common — a timetable whose term ended
+  before the dates being planned produces exactly that. Count what you dropped
+  and why, per record, and check the arithmetic adds up: records in equals
+  results plus reasons.
 - **A lockfile records the platform that generated it.** `package-lock.json`
   written on Windows omitted the top-level `@emnapi/runtime` that
   `@img/sharp-wasm32` depends on — a package win32 never installs — and the first

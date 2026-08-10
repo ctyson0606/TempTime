@@ -87,11 +87,26 @@ export default function BusyInput({
       return
     }
 
-    const result = parseIcs(text, {
-      timezone: room.timezone,
-      from: slotRange(room, 0).start.toJSDate(),
-      to: slotRange(room, totalSlots(room) - 1).end.toJSDate(),
-    })
+    // `parseIcs` returns its failures, and a throw here is our bug rather than
+    // the file's. It still cannot be allowed to escape: this runs from
+    // `void read(file)`, so an exception would reject a promise nobody awaits
+    // and the screen would not change at all — which is exactly how one
+    // malformed property in a university timetable read as "the button does
+    // nothing".
+    let result: ReturnType<typeof parseIcs>
+    try {
+      result = parseIcs(text, {
+        timezone: room.timezone,
+        from: slotRange(room, 0).start.toJSDate(),
+        to: slotRange(room, totalSlots(room) - 1).end.toJSDate(),
+      })
+    } catch (thrown) {
+      setError(
+        `That calendar could not be read: ${thrown instanceof Error ? thrown.message : 'unknown error'}`,
+      )
+      remember(null, new Set())
+      return
+    }
 
     if (!result.ok) {
       setError(`That does not look like a calendar file: ${result.detail}`)
@@ -227,6 +242,9 @@ function describe(skipped: IcsSkipped): string | null {
   if (skipped.empty > 0) parts.push(`${skipped.empty} with no duration`)
   if (skipped.truncated > 0) {
     parts.push(`${skipped.truncated} repeating too often to expand`)
+  }
+  if (skipped.unreadable > 0) {
+    parts.push(`${skipped.unreadable} this calendar wrote in a way we cannot read`)
   }
   return parts.length === 0 ? null : `Ignored: ${parts.join(', ')}.`
 }

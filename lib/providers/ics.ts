@@ -19,6 +19,29 @@ export interface IcsSkipped {
   empty: number
   /** Events whose recurrence hit `MAX_OCCURRENCES` before reaching the range. */
   truncated: number
+  /**
+   * Events ical.js refused to expand.
+   *
+   * Real exports carry values the library will not decode. HKUST's timetable
+   * planner writes `EXDATE;TZID=Asia/Hong_Kong:20260619` — a bare date under a
+   * parameter that declares a date-*time* — and ical.js throws
+   * `invalid date-time value: "2026-06-19T::"` on the first call to `iterator()`.
+   * One such event used to take the whole file down with it.
+   */
+  unreadable: number
+}
+
+/** Every skip, however it was classified. Used to prove each event was seen. */
+function totalSkipped(skipped: IcsSkipped): number {
+  return (
+    skipped.allDay +
+    skipped.transparent +
+    skipped.cancelled +
+    skipped.outsideRange +
+    skipped.empty +
+    skipped.truncated +
+    skipped.unreadable
+  )
 }
 
 export type IcsResult =
@@ -74,6 +97,7 @@ export function parseIcs(text: string, range: IcsRange): IcsResult {
     outsideRange: 0,
     empty: 0,
     truncated: 0,
+    unreadable: 0,
   }
 
   for (const component of calendar.getAllSubcomponents('vevent')) {
@@ -99,7 +123,26 @@ export function parseIcs(text: string, range: IcsRange): IcsResult {
       continue
     }
 
-    collect(event, range, blocks, skipped)
+    // One event must not be able to lose the file. Expansion reaches deep into
+    // ical.js, which throws on values it cannot decode, and a real export only
+    // has to get one property wrong for every other event in it to disappear.
+    const found = blocks.length
+    const accounted = totalSkipped(skipped)
+    try {
+      collect(event, range, blocks, skipped)
+    } catch {
+      skipped.unreadable++
+      continue
+    }
+
+    // Every event leaves a trace: a block, or a reason it produced none. A
+    // recurrence that ends before the room begins takes neither branch inside
+    // `collect` — it simply runs out — and without this the UI would have
+    // nothing to say beyond "nothing matched", which is what an empty file
+    // looks like too.
+    if (blocks.length === found && totalSkipped(skipped) === accounted) {
+      skipped.outsideRange++
+    }
   }
 
   blocks.sort((a, b) => a.start.getTime() - b.start.getTime())

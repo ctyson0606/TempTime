@@ -199,6 +199,55 @@ describe('parseIcs', () => {
     expect(skipped.outsideRange).toBe(1)
   })
 
+  it('counts a recurrence that ends before the range rather than saying nothing', () => {
+    // This one takes neither branch inside the expansion — it simply runs out of
+    // occurrences — so without explicit accounting the file comes back with no
+    // blocks and no reasons, which reads to the user exactly like an empty file.
+    const { blocks, skipped } = parse(
+      calendar(
+        event([
+          'UID:ended@test',
+          'SUMMARY:Last term',
+          'DTSTART;TZID=Asia/Taipei:20260601T140000',
+          'DTEND;TZID=Asia/Taipei:20260601T160000',
+          'RRULE:FREQ=WEEKLY;UNTIL=20260620T235959Z',
+        ]),
+      ),
+    )
+    expect(blocks).toHaveLength(0)
+    expect(skipped.outsideRange).toBe(1)
+  })
+
+  it('survives an event whose recurrence ical.js refuses to expand', () => {
+    // Taken from a real HKUST timetable export: EXDATE declares a TZID, which
+    // makes its values date-*times*, and then writes bare dates. ical.js throws
+    // `invalid date-time value` on the first call to iterator(). That escaped
+    // parseIcs entirely, rejected a promise nobody awaited, and left the import
+    // button looking like it did nothing at all.
+    const { blocks, skipped } = parse(
+      calendar(
+        event([
+          'UID:exdate@test',
+          'SUMMARY:Course with unreadable exclusions',
+          'DTSTART;TZID=Asia/Taipei:20260726T140000',
+          'DTEND;TZID=Asia/Taipei:20260726T180000',
+          'RRULE:FREQ=WEEKLY;UNTIL=20260810T235959Z',
+          'EXDATE;TZID=Asia/Taipei:20260802,20260809',
+        ]),
+        event([
+          'UID:fine@test',
+          'SUMMARY:Readable neighbour',
+          'DTSTART;TZID=Asia/Taipei:20260727T090000',
+          'DTEND;TZID=Asia/Taipei:20260727T100000',
+        ]),
+      ),
+    )
+    // The point of the fix: one bad event costs one event, not the file.
+    expect(skipped.unreadable).toBe(1)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].label).toBe('Readable neighbour')
+  })
+
   it('expands a bounded recurrence', () => {
     const { blocks } = parse(
       calendar(

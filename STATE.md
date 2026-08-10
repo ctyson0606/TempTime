@@ -1,7 +1,7 @@
 # STATE
 
-> Last updated: 2026-08-10 (the heatmap's empty state has a name of its own, and
-> the members/count disagreement is fixed at its source; nothing is open)
+> Last updated: 2026-08-10 (a real university timetable found a silent crash in
+> the `.ics` import; fixed, and it raised one product question)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -137,9 +137,10 @@ needs a reachable privacy page, and there now is one.
   policy; it refuses to run if it sees the development policy at all. All but
   `verify-purge.mjs` and `verify-rls.mjs` create rooms against a limit of ten an
   hour, so a handful of runs an hour is the ceiling for those.
-- 236 tests, with `format:check`, `lint` and `typecheck` clean. Re-run on
-  2026-08-08 after a clean reinstall: 15 files, 236 passed on both machines, and
-  all three checks green on Windows.
+- 238 tests, with `format:check`, `lint` and `typecheck` clean. 236 of them were
+  re-run on 2026-08-08 after a clean reinstall, on both machines, with all three
+  checks green on Windows; the two added since cover the `.ics` import's
+  robustness.
 - **Development runs on two machines**, a Windows desktop and a MacBook Air, both
   against the same Supabase project. Setting the second one up needed a clone,
   `npm install`, `npx playwright install chromium` for the driver scripts, and
@@ -252,6 +253,17 @@ needs a reachable privacy page, and there now is one.
   proposed. Worth remembering rather than chasing: if it returns, this is the
   paragraph that says it has happened before, and the polling fallback is what
   keeps the room working while it is diagnosed.
+- **Should a fixed weekly timetable be expressible at all?** Raised by the first
+  real user file, and unresolved. An `.ics` is anchored to real dates and every
+  course in a university export carries `UNTIL` at the end of term, so a
+  timetable stops importing the day term ends — the file that surfaced the crash
+  ends 2026-07-10 and cannot subtract anything from any room that can now be
+  created. But "every Monday 14:00–18:00" does not expire, and it is what the
+  person actually means. The shape would be a weekly grid painted once and
+  applied to whichever weekdays the room covers. It is a new input, not a fix,
+  and it competes with the connectors for the same time. Decide before starting
+  Todoist, because a weekly pattern is closer to what a student needs than any
+  OAuth connector is.
 - **How should the scale read with very few submitters?** With two people the
   levels in use are the third and the fifth, so "one of two is free" already looks
   fairly strong. It is legible and nobody has complained; whether it should
@@ -286,6 +298,21 @@ needs a reachable privacy page, and there now is one.
 
 ## Recent Decisions
 
+- **2026-08-10 — One unreadable event costs one event, not the whole `.ics`.**
+  A real HKUST timetable export writes `EXDATE;TZID=Asia/Hong_Kong:20260619` —
+  a TZID makes the values date-*times*, and the values are bare dates — so
+  ical.js throws `invalid date-time value` on the first `iterator()` call. The
+  throw escaped `parseIcs`, whose guard covered only the initial parse, and
+  landed in `void read(file)`, where it rejected a promise nobody awaits: the
+  import button did nothing at all, with no error and no message. Expansion is
+  now guarded per event and reported as `skipped.unreadable`, and `BusyInput`
+  catches as a backstop. Repairing the malformed `EXDATE` and recovering those
+  events was considered and not done: it would silently mark the excluded weeks
+  as busy, and that is a judgement to take deliberately rather than while fixing
+  a crash. Every event now also leaves a trace — a recurrence that ends before
+  the room used to produce zero blocks and zero reasons, which reads exactly like
+  an empty file. Both fixes have a test and both tests were sabotaged. The
+  general rules are in METHOD.md → Conventions and → Verification.
 - **2026-08-10 — `GET /heatmap` derives "who answered" from the submissions, not
   from `participants.submitted_at`.** The two were read in two concurrent
   queries while `POST /submit` wrote them in two separate statements, so a read
