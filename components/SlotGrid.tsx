@@ -110,6 +110,14 @@ interface SlotGridProps {
    * screen reader, and to anything else selecting by role.
    */
   label?: string
+  /**
+   * Head each column with the weekday alone.
+   *
+   * For a grid whose dates carry no meaning — the weekly pattern is drawn on an
+   * arbitrary week — where printing `08/10` would invite the reader to believe
+   * the pattern is about that day.
+   */
+  weekdayOnly?: boolean
   /** Look of the cell at `slot`. Return nothing for the plain empty cell. */
   cellClass?: (slot: number) => string | undefined
   /**
@@ -134,6 +142,7 @@ export default function SlotGrid({
   room,
   size = 'medium',
   label,
+  weekdayOnly = false,
   cellClass,
   onPointerDown,
   onPointerMove,
@@ -196,12 +205,20 @@ export default function SlotGrid({
             )}
             <div className={`${style.column} shrink-0`}>
               <div className={`${style.header} text-center`}>
-                <div className={`${style.date} font-medium`}>
-                  {day.toFormat('MM/dd')}
-                </div>
-                <div className={`${style.weekday} text-zinc-500`}>
-                  {day.toFormat('ccc')}
-                </div>
+                {weekdayOnly ? (
+                  <div className={`${style.date} font-medium`}>
+                    {day.toFormat('ccc')}
+                  </div>
+                ) : (
+                  <>
+                    <div className={`${style.date} font-medium`}>
+                      {day.toFormat('MM/dd')}
+                    </div>
+                    <div className={`${style.weekday} text-zinc-500`}>
+                      {day.toFormat('ccc')}
+                    </div>
+                  </>
+                )}
               </div>
               <div
                 className={

@@ -1,16 +1,11 @@
 'use client'
 
-import { type PointerEvent as ReactPointerEvent, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { DateTime } from 'luxon'
 import { type RoomGrid, emptyMask, fullMask, invertMask, totalSlots } from '@/lib/slots'
-import {
-  blockSlots,
-  isMarked,
-  markedCount,
-  maskToBlocks,
-  paintBlock,
-} from '@/lib/providers/manual'
-import SlotGrid, { type GridSize, slotAt, slotAtPoint } from './SlotGrid'
+import { isMarked, markedCount, maskToBlocks } from '@/lib/providers/manual'
+import GridPainter from './GridPainter'
+import type { GridSize } from './SlotGrid'
 
 interface ManualPainterProps {
   room: RoomGrid
@@ -21,13 +16,6 @@ interface ManualPainterProps {
   pending?: string | null
 }
 
-interface Drag {
-  anchor: number
-  focus: number
-  /** What the drag writes, decided by the cell it started on. */
-  value: '0' | '1'
-}
-
 /**
  * Indigo, not the green the results grid uses.
  *
@@ -36,8 +24,6 @@ interface Drag {
  * of you means the same thing in both, and it does not.
  */
 const FREE = 'bg-indigo-500'
-const PAINTING = 'bg-indigo-300 dark:bg-indigo-400'
-const ERASING = 'bg-zinc-200 dark:bg-zinc-700'
 /** Imported, and about to be taken out of the offer — see `BusyInput`. */
 const PENDING_REMOVAL = 'bg-rose-400 dark:bg-rose-700'
 
@@ -63,60 +49,23 @@ export default function ManualPainter({
   size = 'medium',
   pending = null,
 }: ManualPainterProps) {
-  const [drag, setDrag] = useState<Drag | null>(null)
-
-  const preview = useMemo(() => {
-    if (drag === null) return null
-    return new Set(blockSlots(room, drag.anchor, drag.focus))
-  }, [drag, room])
-
-  // Undefined leaves the cell with the grid's own empty look.
-  const cellClass = (slot: number) => {
-    if (preview?.has(slot)) return drag?.value === '1' ? PAINTING : ERASING
-    if (!isMarked(mask, slot)) return undefined
-    // Only a slot that was offered can be taken away, so the removal colour
-    // never appears on a cell the import would not actually change.
-    return pending !== null && isMarked(pending, slot) ? PENDING_REMOVAL : FREE
-  }
-
-  const start = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const slot = slotAt(event.target)
-    if (slot === null) return
-    // Keeps the move and up events coming even once the pointer leaves this
-    // column, which every multi-day drag does immediately.
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setDrag({ anchor: slot, focus: slot, value: isMarked(mask, slot) ? '0' : '1' })
-  }
-
-  const extend = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (drag === null) return
-    // Null means the pointer is over the gutter or off the grid; hold the last
-    // cell rather than collapsing the selection.
-    const slot = slotAtPoint(event.clientX, event.clientY)
-    if (slot === null || slot === drag.focus) return
-    setDrag({ ...drag, focus: slot })
-  }
-
-  const commit = () => {
-    if (drag === null) return
-    onChange(paintBlock(room, mask, drag.anchor, drag.focus, drag.value))
-    setDrag(null)
-  }
+  // Only a slot that was offered can be taken away, so the removal colour never
+  // appears on a cell the import would not actually change.
+  const markedClass = (slot: number) =>
+    pending !== null && isMarked(pending, slot) ? PENDING_REMOVAL : FREE
 
   const marked = markedCount(mask)
   const blocks = useMemo(() => maskToBlocks(room, mask), [room, mask])
 
   return (
     <div className="flex flex-col gap-3">
-      <SlotGrid
+      <GridPainter
         room={room}
+        mask={mask}
+        onChange={onChange}
         size={size}
         label="Your free times"
-        cellClass={cellClass}
-        onPointerDown={start}
-        onPointerMove={extend}
-        onPointerUp={commit}
-        onPointerCancel={() => setDrag(null)}
+        markedClass={markedClass}
       />
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">

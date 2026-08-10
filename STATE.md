@@ -1,7 +1,7 @@
 # STATE
 
-> Last updated: 2026-08-10 (a real university timetable found a silent crash in
-> the `.ics` import; fixed, and it raised one product question)
+> Last updated: 2026-08-11 (the weekly timetable is built and driven; the
+> question the `.ics` crash raised is answered by building it)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -40,9 +40,14 @@ the placeholder now carries a name of its own so the two grids cannot be
 confused again (see Recent Decisions). Chasing it surfaced a real defect in
 `GET /heatmap` — two halves of "who has answered" read from two tables, and a
 window in which they disagreed — which is also fixed and proven both ways.
-Nothing is open and nothing is in flight. The next body of work is the
-second-stage connectors, which publishing unblocked — Google's OAuth review
-needs a reachable privacy page, and there now is one.
+
+**The newest work is the weekly timetable**, chosen over starting the OAuth
+connectors and built on 2026-08-11: a week painted once, kept on the device, and
+subtracted from the free time in whichever room is open. It is the answer to the
+thing an `.ics` structurally cannot say, and it came out of a real file that
+could not be imported at all. Nothing is open and nothing is in flight. The next
+body of work is the second-stage connectors, which publishing unblocked —
+Google's OAuth review needs a reachable privacy page, and there now is one.
 
 ---
 
@@ -114,7 +119,7 @@ needs a reachable privacy page, and there now is one.
   `README.zh-TW.md` and `README.zh-CN.md`, cross-linked from a language line at
   the top of each. The three agree on 12 headings, 6 code blocks and 13 table
   rows, and their 16 lines of commands were diffed rather than read.
-- Seven scripts that verify against the running system, all development-only
+- Eight scripts that verify against the running system, all development-only
   because they write to the live database: `scripts/verify-rls.mjs` (the
   repeatable proof of `PLAN.md` §2.2), `scripts/drive-ui.mjs` (the M1
   acceptance test in two browser contexts, 25 assertions, also covering the
@@ -127,20 +132,31 @@ needs a reachable privacy page, and there now is one.
   overlay does not answer to the live one's accessible name),
   `scripts/verify-purge.mjs` (15 assertions over expiry, the credential and the
   cascade), `scripts/verify-headers.mjs` (22 assertions over the CSP and the
-  security headers) and `scripts/drive-mobile.mjs` (15 assertions in a phone-sized
+  security headers), `scripts/drive-mobile.mjs` (15 assertions in a phone-sized
   touch context; it waits for the heatmap's readout element before it taps,
   because the overlay's own accessible name is also carried by its placeholder —
-  see Recent Decisions). They need a server running — `APP_URL=` for the API probes,
+  see Recent Decisions) and `scripts/drive-weekly.mjs` (12 assertions over the
+  weekly timetable, in a room of two Mondays and the Tuesday between them, and
+  across two rooms because outliving one is the whole point). They need a server running — `APP_URL=` for the API probes,
   `BASE_URL=` for the browser ones, and `verify-rls.mjs` needs neither because it
   talks to Supabase directly. `verify-headers.mjs` is the one that needs a
   **production** build rather than the dev server, since development relaxes the
   policy; it refuses to run if it sees the development policy at all. All but
   `verify-purge.mjs` and `verify-rls.mjs` create rooms against a limit of ten an
   hour, so a handful of runs an hour is the ceiling for those.
-- 238 tests, with `format:check`, `lint` and `typecheck` clean. 236 of them were
+- 255 tests, with `format:check`, `lint` and `typecheck` clean. 236 of them were
   re-run on 2026-08-08 after a clean reinstall, on both machines, with all three
-  checks green on Windows; the two added since cover the `.ics` import's
-  robustness.
+  checks green on Windows; the 19 added since cover the `.ics` import's
+  robustness and the weekly pattern.
+- **A weekly timetable**, the one input that outlives the room it was painted in.
+  `lib/weekly.ts` converts between a painted week and a room's own grid;
+  `lib/weeklyStore.ts` keeps it in `localStorage`. `WeeklyPainter` is the panel,
+  reached from the source picker beside Paint by hand and Import .ics, and like
+  an import it can only subtract. The drag itself moved to `GridPainter`, shared
+  with `ManualPainter`, when this second grid made it a second caller. Also
+  touched: `ProviderId` and the submit schema gained `weekly`, `deriveSources`
+  reads the pattern from the device, `SlotGrid` gained `weekdayOnly`, and the
+  privacy page names it as the one thing kept for longer than a room.
 - **Development runs on two machines**, a Windows desktop and a MacBook Air, both
   against the same Supabase project. Setting the second one up needed a clone,
   `npm install`, `npx playwright install chromium` for the driver scripts, and
@@ -253,17 +269,6 @@ needs a reachable privacy page, and there now is one.
   proposed. Worth remembering rather than chasing: if it returns, this is the
   paragraph that says it has happened before, and the polling fallback is what
   keeps the room working while it is diagnosed.
-- **Should a fixed weekly timetable be expressible at all?** Raised by the first
-  real user file, and unresolved. An `.ics` is anchored to real dates and every
-  course in a university export carries `UNTIL` at the end of term, so a
-  timetable stops importing the day term ends — the file that surfaced the crash
-  ends 2026-07-10 and cannot subtract anything from any room that can now be
-  created. But "every Monday 14:00–18:00" does not expire, and it is what the
-  person actually means. The shape would be a weekly grid painted once and
-  applied to whichever weekdays the room covers. It is a new input, not a fix,
-  and it competes with the connectors for the same time. Decide before starting
-  Todoist, because a weekly pattern is closer to what a student needs than any
-  OAuth connector is.
 - **How should the scale read with very few submitters?** With two people the
   levels in use are the third and the fifth, so "one of two is free" already looks
   fairly strong. It is legible and nobody has complained; whether it should
@@ -289,7 +294,11 @@ needs a reachable privacy page, and there now is one.
   Next.js to 9.3.3, so the correct action is to leave them and wait for a Next.js
   patch.
 - The grid card sizes itself to its widest child, so opening the privacy
-  checklist widens the card and the grid looks off-centre until it closes.
+  checklist widens the card and the grid looks off-centre until it closes. The
+  source picker is now the widest child at rest, because it gained a sixth
+  button on 2026-08-11, so a narrow room sits noticeably right of centre even
+  with nothing open. Fixing it means deciding what the card's width should be
+  driven by, which is more than a class change.
 - The count under the grid — "N of M slots marked free" — updates on release,
   not during a drag. The cell colours already preview the change; a count that
   jumps while dragging was judged noisier than useful.
@@ -298,6 +307,27 @@ needs a reachable privacy page, and there now is one.
 
 ## Recent Decisions
 
+- **2026-08-11 — The weekly timetable is built, and it is kept on the device
+  rather than in the room.** Chosen by the user over starting the OAuth
+  connectors. The case that decided it: a real HKUST export ends every course
+  with `UNTIL` at the close of term, so a timetable stops importing the day term
+  ends, while "Mondays, two till six" does not expire — and an `.ics` has no way
+  at all to say the latter. `localStorage`, not the `sessionStorage` the import
+  cache uses, was the user's call and is the whole value: a pattern that died
+  with the tab would be repainted per room, which is barely better than painting
+  the room. What that buys is stated on the privacy page. What is stored is
+  weekday and clock time only — no titles — and it is stored as minutes rather
+  than as a mask, because a mask is shaped by one room's day window and the
+  pattern has to survive the next one. The general rule is in METHOD.md →
+  Conventions.
+- **2026-08-11 — The drag moved into `GridPainter` when the second grid needed
+  it, not before.** Copying forty lines of pointer handling into the weekly
+  painter would have left two versions of the one gesture that is hardest to get
+  right on a phone, and they would have drifted where no test looks. What stayed
+  above the extraction is everything that differs: the colours, the counts, and
+  every word. `ManualPainter` and `WeeklyPainter` share the gesture and nothing
+  else. All four driver scripts were re-run after the refactor rather than
+  reasoned about.
 - **2026-08-10 — One unreadable event costs one event, not the whole `.ics`.**
   A real HKUST timetable export writes `EXDATE;TZID=Asia/Hong_Kong:20260619` —
   a TZID makes the values date-*times*, and the values are bare dates — so

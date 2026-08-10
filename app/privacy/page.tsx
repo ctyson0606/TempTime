@@ -124,9 +124,19 @@ export default function PrivacyPage() {
         </p>
         <p>
           Imported event names are held only for the tab you are using and are gone when
-          you close it. Clearing your browser storage removes all of this; if you were
-          the room&apos;s creator and did not save the admin link, you will no longer be
-          able to delete it early.
+          you close it.
+        </p>
+        <p>
+          A weekly timetable, if you paint one, is the one thing kept for longer than a
+          single room: it stays in local storage on this device so the next room can
+          reuse it. It holds weekdays and clock times only — no course names, no titles,
+          nothing about what any of it is for — and it is never sent anywhere. Clear all
+          of it from the timetable panel itself.
+        </p>
+        <p>
+          Clearing your browser storage removes all of this; if you were the room&apos;s
+          creator and did not save the admin link, you will no longer be able to delete
+          it early.
         </p>
       </Section>
 

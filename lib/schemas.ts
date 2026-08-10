@@ -109,7 +109,9 @@ export const submitSchema = z.object({
    * is loaded. Both checks are required; neither implies the other.
    */
   busyMask: z.string().regex(/^[01]+$/, 'a mask is a string of 0 and 1'),
-  sources: z.array(z.enum(['manual', 'ics', 'google', 'todoist', 'ticktick'])),
+  sources: z.array(
+    z.enum(['manual', 'weekly', 'ics', 'google', 'todoist', 'ticktick']),
+  ),
 })
 
 /**

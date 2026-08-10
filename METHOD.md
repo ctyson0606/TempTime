@@ -321,6 +321,14 @@ later, passed twice and failed once with the feature working perfectly
 throughout. An intermittent assertion is worse than a failing one — it gets
 re-run until it passes. Fix the timing, do not retry the probe.
 
+**"Did it apply?" needs a neighbour it must not touch.** A weekly Monday pattern
+laid over a room of two Mondays and a Tuesday is checked on all three: the
+Mondays lose their slots, and the Tuesday must lose none. Without the Tuesday,
+every assertion in that test is satisfied by a bug that marks every day — which
+is exactly what the sabotage produced, and exactly which assertion caught it.
+Whenever a change is meant to be selective, the case it must leave alone belongs
+in the same test as the case it must change.
+
 Assert the shape of the answer, not its presence. "Some cells are coloured" is
 satisfied by a scale that renders one colour everywhere; grouping the cells by
 computed colour and requiring the group sizes to come out `49,10,5` is an
@@ -539,6 +547,20 @@ Update semantics:
   two things about the same fact, derive them from one read, or accept that
   every window between the writes is a response someone will see. A transaction
   around the writes narrows the window; one source removes it.
+- **Anything kept across contexts is stored in the vocabulary that outlives
+  them.** The weekly pattern is held as weekday plus minutes-from-midnight, not
+  as the 0/1 mask the grid paints, because a mask is shaped by one room's day
+  window and slot length and the pattern is meant to be reused in the next room.
+  Store what the thing *means*; derive the rendering at the point of use. The
+  test is whether the stored value still makes sense when the container it was
+  created in no longer exists.
+- **An action whose effect depends on context says what it will do to that
+  context.** "Take 4 slots out of my free time" rather than "Apply my
+  timetable": a perfectly good weekly pattern can land on none of the days a
+  particular room covers, and a button that describes *itself* looks identical
+  whether it will do everything or nothing. Quantify the effect in the label,
+  and let zero disable the control — then "nothing will happen" is visible
+  before the click rather than after it.
 - **Caller errors return, configuration errors throw.** A bad credential or
   malformed input is the caller's problem: return `null` or a typed result the
   route maps to a status code, without revealing which check failed. A missing or

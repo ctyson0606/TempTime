@@ -26,6 +26,12 @@ interface Source {
  */
 const SOURCES: Source[] = [
   { id: 'manual', label: 'Paint by hand', note: 'Drag on the grid', available: true },
+  {
+    id: 'weekly',
+    label: 'Weekly timetable',
+    note: 'Kept on this device',
+    available: true,
+  },
   { id: 'ics', label: 'Import .ics', note: 'Read in your browser', available: true },
   { id: 'google', label: 'Google Calendar', note: 'Coming soon', available: false },
   { id: 'todoist', label: 'Todoist', note: 'Coming soon', available: false },

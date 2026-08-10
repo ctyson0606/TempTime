@@ -29,6 +29,8 @@ import {
 } from '@/lib/roomSession'
 import { type RealtimeMode, watchRoom } from '@/lib/realtime'
 import { loadImport } from '@/lib/importCache'
+import { weeklyToRoomMask } from '@/lib/weekly'
+import { loadWeekly } from '@/lib/weeklyStore'
 import {
   type RoomGrid,
   blocksToMask,
@@ -107,11 +109,21 @@ function deriveSources(room: RoomGrid, code: string, mask: string): string[] {
     cached?.selected.includes(block.id),
   )
   const fromIcs = ticked.length > 0 ? blocksToMask(room, ticked) : null
+  // The weekly pattern is kept on the device, not in this room's cache, so it is
+  // read from there. It is only a source of *this* submission where it lands on
+  // a day this room covers.
+  const stored = loadWeekly()
+  const fromWeekly =
+    stored !== null && stored.length > 0 ? weeklyToRoomMask(room, stored) : null
+
+  const accounted = (index: number) =>
+    fromIcs?.[index] === '1' || fromWeekly?.[index] === '1'
 
   const sources: string[] = []
   if (fromIcs !== null && fromIcs.includes('1')) sources.push('ics')
+  if (fromWeekly !== null && fromWeekly.includes('1')) sources.push('weekly')
   for (let i = 0; i < mask.length; i++) {
-    if (mask[i] === '1' && fromIcs?.[i] !== '1') {
+    if (mask[i] === '1' && !accounted(i)) {
       sources.push('manual')
       break
     }

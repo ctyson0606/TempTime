@@ -11,9 +11,12 @@ import {
 import { clearImport, loadImport, saveImport } from '@/lib/importCache'
 import { type IcsSkipped, parseIcs } from '@/lib/providers/ics'
 import type { BusyBlock, ProviderId } from '@/lib/providers/types'
+import { type WeeklyBlock, weeklyToRoomMask } from '@/lib/weekly'
+import { loadWeekly, saveWeekly } from '@/lib/weeklyStore'
 import ManualPainter from './ManualPainter'
 import PrivacyChecklist from './PrivacyChecklist'
 import SourcePicker from './SourcePicker'
+import WeeklyPainter from './WeeklyPainter'
 import type { GridSize } from './SlotGrid'
 
 interface BusyInputProps {
@@ -59,12 +62,43 @@ export default function BusyInput({
   const [hint, setHint] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
-  /** What the ticked events would remove, drawn on the grid before it is committed. */
+  // The weekly pattern outlives this room, so it is read from the device rather
+  // than from the room's cache, and it is held whether or not the panel is open.
+  const [weekly, setWeekly] = useState<WeeklyBlock[]>(() =>
+    isBrowser() ? (loadWeekly() ?? []) : [],
+  )
+  const [weeklyOpen, setWeeklyOpen] = useState(false)
+
+  /** The pattern laid over *this* room's days. Empty when none of them match. */
+  const weeklyHere = useMemo(() => weeklyToRoomMask(room, weekly), [room, weekly])
+
+  /**
+   * How much of the offer the pattern would actually take.
+   *
+   * Not the size of the pattern: a perfectly good week can touch none of the
+   * days this room covers, and a button offering to remove nothing should say
+   * so rather than appear to work.
+   */
+  const weeklyAffected = useMemo(() => {
+    let count = 0
+    for (let i = 0; i < mask.length; i++) {
+      if (mask[i] === '1' && weeklyHere[i] === '1') count++
+    }
+    return count
+  }, [mask, weeklyHere])
+
+  /**
+   * What the open source would remove, drawn on the grid before it is committed.
+   *
+   * Only one source is ever open — the picker disables the others — so this is a
+   * single preview rather than a merge.
+   */
   const pending = useMemo(() => {
+    if (weeklyOpen) return weeklyHere.includes('1') ? weeklyHere : null
     if (imported === null) return null
     const ticked = imported.filter((block) => selected.has(block.id))
     return ticked.length === 0 ? null : blocksToMask(room, ticked)
-  }, [imported, selected, room])
+  }, [weeklyOpen, weeklyHere, imported, selected, room])
 
   const pick = (source: ProviderId) => {
     setError(null)
@@ -72,7 +106,28 @@ export default function BusyInput({
       fileInput.current?.click()
       return
     }
+    if (source === 'weekly') {
+      setHint(null)
+      setNotice(null)
+      setWeeklyOpen(true)
+      return
+    }
     setHint('Drag across the grid below to mark when you are free.')
+  }
+
+  /** Edits to the pattern are saved as they happen: that is what "kept" means. */
+  const editWeekly = (blocks: WeeklyBlock[]) => {
+    setWeekly(blocks)
+    saveWeekly(blocks)
+  }
+
+  const applyWeekly = () => {
+    const taken = weeklyAffected
+    onChange(subtractMask(mask, weeklyHere))
+    setWeeklyOpen(false)
+    setNotice(
+      `Took ${taken} ${taken === 1 ? 'slot' : 'slots'} out of your free time. Your week is still saved.`,
+    )
   }
 
   const read = async (file: File) => {
@@ -159,8 +214,8 @@ export default function BusyInput({
     <div className="flex flex-col gap-3">
       <SourcePicker
         onPick={pick}
-        active={imported === null ? null : 'ics'}
-        busy={imported !== null}
+        active={weeklyOpen ? 'weekly' : imported === null ? null : 'ics'}
+        busy={imported !== null || weeklyOpen}
       />
 
       <input
@@ -189,6 +244,17 @@ export default function BusyInput({
       {imported === null
         ? notice !== null && <p className="text-xs text-zinc-500">{notice}</p>
         : null}
+
+      {weeklyOpen && (
+        <WeeklyPainter
+          room={room}
+          blocks={weekly}
+          onChange={editWeekly}
+          onApply={applyWeekly}
+          onClose={() => setWeeklyOpen(false)}
+          affectedSlots={weeklyAffected}
+        />
+      )}
 
       {imported !== null && (
         <PrivacyChecklist
