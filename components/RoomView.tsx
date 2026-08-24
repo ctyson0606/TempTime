@@ -464,6 +464,100 @@ export default function RoomView({ code }: { code: string }) {
         <ExpiryBadge expiresAt={room.expiresAt} timezone={room.timezone} />
       </header>
 
+      {displayName !== null && (
+        /* Above the grid, not below it. The painter is the tallest card on the
+           page, so a send card underneath it starts off-screen on a phone:
+           whether an answer had gone out, and when, sat a scroll past the whole
+           week away from the only screen anyone looks at. Nothing can be sent by
+           accident from up here — the button is disabled until a slot is marked
+           free, and the line beside it says why. */
+        <section
+          className={`${COLUMN} rounded-2xl border p-4 ${
+            submittedAt === null
+              ? 'border-amber-300 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/25'
+              : 'border-emerald-300 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/25'
+          }`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Capped so the explanation does not run the full width of the card
+                and push the buttons onto a line of their own. */}
+            <div className="max-w-md">
+              {/* The dot repeats the heading in colour, the way LiveBadge does,
+                  so the state is readable before the word is. Decorative
+                  precisely because the word beside it already says this. */}
+              <h2 className="flex items-center gap-2 text-base font-semibold">
+                <span
+                  aria-hidden
+                  className={`h-2.5 w-2.5 rounded-full ${
+                    submittedAt === null ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`}
+                />
+                {submittedAt === null ? 'Not sent yet' : 'Sent'}
+              </h2>
+              {/* Reserves the tallest of the three lines below, the way the
+                  heatmap's readout does. This card sits *above* the grid now,
+                  so a state change that alters its height moves the grid: the
+                  first painted slot swaps a three-line explanation for a
+                  two-line one and the cells jumped 16px under the finger that
+                  had just painted them. */}
+              <div className="mt-1 min-h-12">
+                {submittedAt === null ? (
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                    {nothingOffered
+                      ? 'Mark at least one slot as free first. If none of these days work for you, leaving this unsent says so more clearly than sending an empty answer.'
+                      : 'Only the string of 0s and 1s is sent — never an event name.'}
+                  </p>
+                ) : (
+                  /* When it went out is the fact this card exists to report, so
+                     it gets its own line at its own weight rather than sitting
+                     as grey small print in the middle of a sentence. */
+                  <>
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      Last sent{' '}
+                      <time dateTime={submittedAt}>
+                        {new Date(submittedAt).toLocaleString()}
+                      </time>
+                    </p>
+                    <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
+                      Send again any time to change it.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {submittedAt !== null && (
+                <button
+                  type="button"
+                  onClick={() => void withdraw()}
+                  disabled={submitting}
+                  className="rounded-xl bg-white px-3 py-2 text-sm font-medium enabled:hover:bg-zinc-100 disabled:opacity-40 dark:bg-zinc-800 dark:enabled:hover:bg-zinc-700"
+                >
+                  Withdraw
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => void send(room, mask)}
+                disabled={submitting || nothingOffered}
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white enabled:hover:bg-indigo-500 disabled:opacity-40"
+              >
+                {submitting
+                  ? 'Sending…'
+                  : submittedAt === null
+                    ? 'Send my times'
+                    : 'Send again'}
+              </button>
+            </div>
+          </div>
+          {submitError !== null && (
+            <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+              {submitError}
+            </p>
+          )}
+        </section>
+      )}
+
       <section
         className={`${GRID_CARD_WIDTH} rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800`}
       >
@@ -491,56 +585,6 @@ export default function RoomView({ code }: { code: string }) {
           />
         )}
       </section>
-
-      {displayName !== null && (
-        <section
-          className={`${COLUMN} rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800`}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-medium">
-                {submittedAt === null ? 'Not sent yet' : 'Sent'}
-              </h2>
-              <p className="mt-1 text-xs text-zinc-500">
-                {nothingOffered
-                  ? 'Mark at least one slot as free first. If none of these days work for you, leaving this unsent says so more clearly than sending an empty answer.'
-                  : submittedAt === null
-                    ? 'Only the string of 0s and 1s is sent — never an event name.'
-                    : `Last sent ${new Date(submittedAt).toLocaleString()}. Send again any time to change it.`}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              {submittedAt !== null && (
-                <button
-                  type="button"
-                  onClick={() => void withdraw()}
-                  disabled={submitting}
-                  className="rounded-xl bg-zinc-100 px-3 py-2 text-sm font-medium enabled:hover:bg-zinc-200 disabled:opacity-40 dark:bg-zinc-800 dark:enabled:hover:bg-zinc-700"
-                >
-                  Withdraw
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => void send(room, mask)}
-                disabled={submitting || nothingOffered}
-                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white enabled:hover:bg-indigo-500 disabled:opacity-40"
-              >
-                {submitting
-                  ? 'Sending…'
-                  : submittedAt === null
-                    ? 'Send my times'
-                    : 'Send again'}
-              </button>
-            </div>
-          </div>
-          {submitError !== null && (
-            <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
-              {submitError}
-            </p>
-          )}
-        </section>
-      )}
 
       {heatmap !== null && (
         <>

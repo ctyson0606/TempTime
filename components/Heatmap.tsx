@@ -1,6 +1,7 @@
 'use client'
 
 import { type PointerEvent as ReactPointerEvent, useState } from 'react'
+import { rankFor, stepsInUse } from '@/lib/heatScale'
 import { formatSlotWindow } from '@/lib/room'
 import type { RoomGrid } from '@/lib/slots'
 import SlotGrid, { type GridSize, slotAtPoint } from './SlotGrid'
@@ -17,16 +18,34 @@ interface HeatmapProps {
  * Written out in full because Tailwind only emits the classes it can see in the
  * source; an interpolated `bg-emerald-${n}` reaches the browser as nothing.
  *
- * Green deepens with how many people are free, and the last step is reserved for
- * everyone — the answer people are actually looking for should not be a shade
- * away from "almost everyone".
+ * Green deepens with how many people are free. Which of these steps a room
+ * actually uses is `lib/heatScale.ts`'s decision, not this array's — a room of
+ * two people uses the first and the last, not the first two.
+ *
+ * The steps were chosen against the empty cell they sit beside, not by eye. The
+ * ramp this replaces ran emerald-100 to emerald-500, and measured against
+ * `bg-zinc-100` it failed on two counts: its palest step stood at 1.03:1
+ * contrast, so "one person is free" was all but the same colour as "nobody is",
+ * and its first two steps were 0.046 apart in perceptual lightness against a
+ * 0.06 floor. Both ramps below clear a monotone-lightness check, a 0.06 gap
+ * between neighbours, and 2:1 at the pale end against that mode's empty cell.
+ * No opacity anywhere: a translucent step is a different colour than the one
+ * that was measured. Dark mode is its own selection rather than a flip of the
+ * light one — brightness has to increase with the count there, so the ramp runs
+ * the other way.
+ *
+ * Four steps and not five. Once the pale end is pinned at emerald-500 by that
+ * 2:1 floor, a fifth step with a visible gap below it lands on emerald-950,
+ * which reads as black rather than as green: "everyone is free" stopped looking
+ * like the thing the eye is hunting for and started looking like a hole in the
+ * grid. Dropping a step buys back a top that is still recognisably green, and
+ * four levels is more gradation than a room of two or three ever shows.
  */
 const LEVELS = [
-  'bg-emerald-100 dark:bg-emerald-950',
-  'bg-emerald-200 dark:bg-emerald-900',
-  'bg-emerald-300 dark:bg-emerald-800/80',
-  'bg-emerald-400 dark:bg-emerald-700',
-  'bg-emerald-500 dark:bg-emerald-500',
+  'bg-emerald-500 dark:bg-emerald-800',
+  'bg-emerald-600 dark:bg-emerald-600',
+  'bg-emerald-700 dark:bg-emerald-500',
+  'bg-emerald-900 dark:bg-emerald-300',
 ]
 
 /**
@@ -43,6 +62,9 @@ export default function Heatmap({
   size = 'medium',
 }: HeatmapProps) {
   const [hovered, setHovered] = useState<number | null>(null)
+  // Which steps this room is drawing with, low to high. The legend has to show
+  // the same ones the cells use, so both read it from here.
+  const scale = stepsInUse(submittedCount, LEVELS.length)
 
   if (submittedCount === 0) {
     // All-zero counts drawn literally are indistinguishable from "everyone is
@@ -70,10 +92,9 @@ export default function Heatmap({
   // Undefined leaves the cell with the grid's own empty look. Returning '' here
   // instead would be silently discarded by the grid's fallback.
   const cellClass = (slot: number): string | undefined => {
-    const free = freeCounts[slot] ?? 0
-    if (free <= 0) return undefined
-    const level = Math.ceil((free / submittedCount) * LEVELS.length) - 1
-    return LEVELS[Math.min(Math.max(level, 0), LEVELS.length - 1)]
+    const rank = rankFor(freeCounts[slot] ?? 0, submittedCount, LEVELS.length)
+    if (rank < 0) return undefined
+    return LEVELS[scale[rank]]
   }
 
   const track = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -121,7 +142,7 @@ export default function Heatmap({
             ? `${submittedCount} ${submittedCount === 1 ? 'person has' : 'people have'} answered. Tap or hover a slot to read it.`
             : describe(room, hovered, freeCounts[hovered] ?? 0, submittedCount)}
         </p>
-        <Legend submittedCount={submittedCount} />
+        <Legend submittedCount={submittedCount} scale={scale} />
       </div>
     </div>
   )
@@ -141,13 +162,24 @@ function describe(
   return `${when} — ${free} of ${submittedCount} free`
 }
 
-function Legend({ submittedCount }: { submittedCount: number }) {
+/**
+ * Only the steps in play. Drawing all five in a room of two would promise a
+ * gradation the grid never shows, and the swatch someone is trying to match
+ * their cell against would not be among them.
+ */
+function Legend({
+  submittedCount,
+  scale,
+}: {
+  submittedCount: number
+  scale: readonly number[]
+}) {
   return (
     <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
       <span>0</span>
       <div className="h-3 w-4 rounded-sm bg-zinc-100 dark:bg-zinc-800/60" />
-      {LEVELS.map((level) => (
-        <div key={level} className={`h-3 w-4 rounded-sm ${level}`} />
+      {scale.map((step) => (
+        <div key={step} className={`h-3 w-4 rounded-sm ${LEVELS[step]}`} />
       ))}
       <span>{submittedCount} free</span>
     </div>

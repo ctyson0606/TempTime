@@ -121,8 +121,19 @@ try {
     'an empty selection cannot be sent',
   )
 
+  // Both ends on screen before either is measured. `boundingBox` answers in the
+  // viewport, and a coordinate past the bottom of it is real but unreachable —
+  // the pointer clamps to the edge and the drag quietly covers a different
+  // number of slots than it asked for. That is a wrong answer this file's own
+  // assertions cannot see, since they are all relative to whatever got painted.
+  await painter.locator('[data-slot="8"]').scrollIntoViewIfNeeded()
+  await painter.locator('[data-slot="4"]').scrollIntoViewIfNeeded()
   const from = await painter.locator('[data-slot="4"]').boundingBox()
   const to = await painter.locator('[data-slot="8"]').boundingBox()
+  const viewport = b.viewportSize().height
+  if (from.y < 0 || to.y + to.height > viewport) {
+    throw new Error(`slots 4–8 do not fit on screen together (of ${viewport})`)
+  }
   await b.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
   await b.mouse.down()
   await b.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 })

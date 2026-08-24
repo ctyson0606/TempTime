@@ -65,10 +65,28 @@ const cellBox = async (grid, slot) => {
   return cell.boundingBox()
 }
 
-/** Drag from one cell to another inside a named grid. */
+/**
+ * Drag from one cell to another inside a named grid.
+ *
+ * Both ends are brought on screen *before* either is measured. Measuring one
+ * and then scrolling for the other leaves the first coordinate stale by however
+ * far the page moved, so the drag starts on a slot nobody asked for — silently,
+ * because every number involved is a real coordinate of a real cell. That is
+ * how a ten-slot drag came back as twelve when a card was added above the grid
+ * and pushed its far end below the fold.
+ */
 const drag = async (page, grid, fromSlot, toSlot) => {
-  const from = await cellBox(grid, fromSlot)
-  const to = await cellBox(grid, toSlot)
+  await grid.locator(`[data-slot="${toSlot}"]`).scrollIntoViewIfNeeded()
+  await grid.locator(`[data-slot="${fromSlot}"]`).scrollIntoViewIfNeeded()
+  const from = await grid.locator(`[data-slot="${fromSlot}"]`).boundingBox()
+  const to = await grid.locator(`[data-slot="${toSlot}"]`).boundingBox()
+  const height = page.viewportSize().height
+  if (from.y < 0 || to.y + to.height > height) {
+    throw new Error(
+      `slots ${fromSlot}–${toSlot} do not fit on screen together ` +
+        `(${Math.round(from.y)}–${Math.round(to.y + to.height)} of ${height})`,
+    )
+  }
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
   await page.mouse.down()
   await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 })

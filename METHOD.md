@@ -321,6 +321,49 @@ later, passed twice and failed once with the feature working perfectly
 throughout. An intermittent assertion is worse than a failing one — it gets
 re-run until it passes. Fix the timing, do not retry the probe.
 
+**A two-ended gesture is measured after both ends are on screen, not one end at
+a time.** One card added above the grid pushed the far end of a drag below the
+fold, and three probes answered the same cause three different ways. The phone
+one dispatched touch at a coordinate no finger could reach and painted nothing —
+loud, and correctly read as the probe's fault. The heatmap one measured the near
+cell, scrolled to bring the far one into view, and dragged from a coordinate
+that was stale by exactly that scroll: ten slots asked for, twelve painted, and
+the histogram assertion caught it only because it asserts arithmetic rather than
+presence. The third quietly painted four cells where it had always painted five
+and **passed**, because every assertion around it was relative to whatever got
+painted. Nothing looks wrong in any of them: each number is a real coordinate of
+a real cell. Scroll both ends into view before measuring either, and throw when
+they cannot both fit — a drag that does not fit on screen is a finding, not
+something to approximate.
+
+**A colour scale is measurable, and "it looks the same to me" is the
+measurement.** Five shades of one green were shipped on the grounds that they
+deepened; the user's report that they were indistinguishable turned out to be
+two numbers. Against the empty cell they sit beside, the palest step stood at
+1.03:1 — so "one person is free" and "nobody is" were the same colour — and the
+first two steps were 0.046 apart in perceptual lightness against a 0.06 floor.
+An ordinal ramp has four checkable properties: lightness moves one way, each
+neighbour clears a visible gap, the pale end clears its surface, and the hue
+stays put. Check them with a script before arguing about taste, and check the
+dark ramp separately — it is a selection, not a flip, because there the
+brightness has to climb as the value does. What taste is still for: the ramp
+that first passed put "everyone is free" on a green so dark it read as a hole in
+the grid rather than the thing the eye is hunting for, so a step was dropped to
+buy the top back. The checks say which ramps are legible; they do not say which
+one means what you meant.
+
+**A scale with more steps than data is a scale nobody can read.** The same
+heatmap spread five steps proportionally over however many people had answered,
+so a room of two used two of the five — and not the two ends, but two neighbours
+three-fifths of the way up. Every real room early in its life looks like that.
+Use as many steps as the data can distinguish, spread across the whole range,
+and let the ramp open out as more arrive; the legend then shows the steps in
+play rather than a gradation the grid never draws. While fixing it, check what
+the top of the scale is reserved for: a comment here claimed the top step meant
+*everyone* and the arithmetic did not deliver it above five submitters, so
+six-of-seven and seven-of-seven were the same colour — the one answer the whole
+page exists to surface, lost to a rounding boundary nobody had tested.
+
 **"Did it apply?" needs a neighbour it must not touch.** A weekly Monday pattern
 laid over a room of two Mondays and a Tuesday is checked on all three: the
 Mondays lose their slots, and the Tuesday must lose none. Without the Tuesday,
@@ -528,6 +571,15 @@ Update semantics:
   twice. Rendering every page per request does not reverse this — there is no
   static page for an edge to serve — because the render itself touches no
   database.
+- **Anything placed above the thing being manipulated has to hold its height.**
+  A status card was moved above the grid so that it could be seen at all, and
+  then changed height the moment the first slot was painted — a three-line
+  explanation became a two-line one — so the grid jumped 16px under the finger
+  that had just painted it. Below the grid the same change moved nothing anyone
+  was looking at. Reserve the tallest state, as the heatmap's readout already
+  does for the same reason, rather than letting one state change shift what is
+  being used. The phone probe caught it as a page scroll that should not have
+  happened, which is what that assertion is worth.
 - **A tap is not a small hover.** A finger that lands without travelling fires
   `pointerdown` and `pointerup` and *no* `pointermove` at all, so anything
   driven off movement alone simply does not exist on a phone — a readout that

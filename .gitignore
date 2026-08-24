@@ -32,6 +32,7 @@ next-env.d.ts
 /room-*.png
 /heatmap.png
 /mobile-*.png
+/weekly-*.png
 
 # Environment — never commit real credentials, see .env.example
 .env*

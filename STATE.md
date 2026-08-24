@@ -1,7 +1,8 @@
 # STATE
 
-> Last updated: 2026-08-11 (the weekly timetable is built and driven; the
-> question the `.ics` crash raised is answered by building it)
+> Last updated: 2026-08-25 (both halves of the legibility complaint are built:
+> the send card moved above the grid, and the heatmap's colour scale is measured
+> rather than eyeballed)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -15,8 +16,8 @@ archived — git holds the history. For durable rules and workflow, see
 the free-time version.** Every milestone in `PLAN.md` §11 is complete, and so is
 the product change that followed them: the grid collects the time someone *is*
 free, and an import can only subtract from it (`PLAN.md` §3.4, §10, §14, and the
-Recent Decisions below). All of it is committed, pushed, and verified against the
-deployment rather than only against a laptop.
+Recent Decisions below). All of it is verified against the deployment rather
+than only against a laptop.
 
 All three questions that could only be answered by publishing are now closed. The
 nonce CSP does survive a CDN in front of it — the pages hydrate online, which is
@@ -41,13 +42,20 @@ confused again (see Recent Decisions). Chasing it surfaced a real defect in
 `GET /heatmap` — two halves of "who has answered" read from two tables, and a
 window in which they disagreed — which is also fixed and proven both ways.
 
-**The newest work is the weekly timetable**, chosen over starting the OAuth
-connectors and built on 2026-08-11: a week painted once, kept on the device, and
-subtracted from the free time in whichever room is open. It is the answer to the
-thing an `.ics` structurally cannot say, and it came out of a real file that
-could not be imported at all. Nothing is open and nothing is in flight. The next
-body of work is the second-stage connectors, which publishing unblocked —
-Google's OAuth review needs a reachable privacy page, and there now is one.
+The weekly timetable, built on 2026-08-11, was the last feature: a week
+painted once, kept on the device, and subtracted from the free time in whichever
+room is open. It is the answer to the thing an `.ics` structurally cannot say,
+and it came out of a real file that could not be imported at all.
+
+**The newest work is legibility, raised by the user on 2026-08-24 as two
+complaints, and both are built.** Whether an answer has been sent, and when, was
+a card below a full-height grid and is now the first thing under the room's
+header, in amber or green with a coloured dot. And the heatmap's greens, which
+were too close together to read how many people share a slot, are now a measured
+ramp of four steps, with a room using only as many of them as it has people. The
+long-standing Open Question about the scale with few submitters is answered by
+the same change. Nothing else is open; the next body of work is the second-stage
+connectors.
 
 ---
 
@@ -66,6 +74,11 @@ Google's OAuth review needs a reachable privacy page, and there now is one.
   grid, QR and admin links, join-by-name, owner-only delete, `ManualPainter`,
   `SourcePicker`, `PrivacyChecklist`, and send / send-again / withdraw — all
   talking to the real API through `lib/roomClient.ts`.
+- The send card sits above the grid rather than below it, and says its state
+  in colour: an amber card with an amber dot for `Not sent yet`, green for
+  `Sent`, with the timestamp on its own line at its own weight. Its text block
+  reserves the height of its tallest state, because a card above the grid that
+  changes height moves the grid.
 - `lib/roomSession.ts` holds what stays in this browser: token, participant id,
   owner secret, display name, and the unsent draft mask.
 - Live Supabase project: schema, RLS, explicit grants and the hourly `pg_cron`
@@ -76,8 +89,10 @@ Google's OAuth review needs a reachable privacy page, and there now is one.
   `POST /api/rooms/:code/join`, `POST` and `DELETE /api/rooms/:code/submit`,
   `GET /api/rooms/:code/my-submission`, `GET /api/rooms/:code/heatmap`.
 - `fetchHeatmap` in `lib/roomClient.ts` and the results UI it feeds: `Heatmap`
-  (five-step colour scale, hover readout, empty state), `BestSlots` and
-  `MemberList`, all wired into `RoomView`.
+  (a measured four-step colour ramp, hover and tap readout, named empty state),
+  `BestSlots` and `MemberList`, all wired into `RoomView`. `lib/heatScale.ts`
+  decides how many of the ramp's steps a room of N people uses and which one a
+  slot lands on; the colours themselves stay in the component.
 - `lib/realtime.ts`: subscribes to `participants` for the room and refetches
   `/heatmap` on any change, falling back to polling every four seconds if the
   channel does not reach `SUBSCRIBED` within five. The pushed payload is
@@ -137,17 +152,21 @@ Google's OAuth review needs a reachable privacy page, and there now is one.
   because the overlay's own accessible name is also carried by its placeholder —
   see Recent Decisions) and `scripts/drive-weekly.mjs` (12 assertions over the
   weekly timetable, in a room of two Mondays and the Tuesday between them, and
-  across two rooms because outliving one is the whole point). They need a server running — `APP_URL=` for the API probes,
+  across two rooms because outliving one is the whole point). The three that
+  drag across a grid — `drive-ui.mjs`, `drive-heatmap.mjs` and
+  `drive-mobile.mjs` — bring both ends of the drag on screen before measuring
+  either, and the first two throw rather than approximate when the two ends
+  cannot both fit. They need a server running — `APP_URL=` for the API probes,
   `BASE_URL=` for the browser ones, and `verify-rls.mjs` needs neither because it
   talks to Supabase directly. `verify-headers.mjs` is the one that needs a
   **production** build rather than the dev server, since development relaxes the
   policy; it refuses to run if it sees the development policy at all. All but
   `verify-purge.mjs` and `verify-rls.mjs` create rooms against a limit of ten an
   hour, so a handful of runs an hour is the ceiling for those.
-- 255 tests, with `format:check`, `lint` and `typecheck` clean. 236 of them were
+- 265 tests, with `format:check`, `lint` and `typecheck` clean. 236 of them were
   re-run on 2026-08-08 after a clean reinstall, on both machines, with all three
-  checks green on Windows; the 19 added since cover the `.ics` import's
-  robustness and the weekly pattern.
+  checks green on Windows; the 29 added since cover the `.ics` import's
+  robustness, the weekly pattern and the heatmap's colour scale.
 - **A weekly timetable**, the one input that outlives the room it was painted in.
   `lib/weekly.ts` converts between a painted week and a room's own grid;
   `lib/weeklyStore.ts` keeps it in `localStorage`. `WeeklyPainter` is the panel,
@@ -200,8 +219,8 @@ Google's OAuth review needs a reachable privacy page, and there now is one.
   their own machine. Reported: the room updated on its own with no reload, the
   badge read "Updating live" — so the Realtime socket, not the four-second
   polling fallback — and it felt like a second or two. Observed by the user, not
-  instrumented; there is still no measured production figure (see Open
-  Questions).
+  instrumented; the measured production figures came later and separately (see
+  Recent Decisions, 2026-08-09).
 - The grid collects free time. The browser holds a free-time mask; `invertMask`
   converts it to `busy_mask` immediately before a submission leaves and
   immediately after `my-submission` comes back, and nothing else in the system
@@ -221,7 +240,7 @@ Google's OAuth review needs a reachable privacy page, and there now is one.
   each of the six against the code rather than against this file.
 
 **In Progress**
-- Nothing. The repository, the deployment and this file agree.
+- Nothing.
 
 **Blocked**
 - Nothing waits on an outside decision. One item waits on somebody else's queue
@@ -269,11 +288,6 @@ Google's OAuth review needs a reachable privacy page, and there now is one.
   proposed. Worth remembering rather than chasing: if it returns, this is the
   paragraph that says it has happened before, and the polling fallback is what
   keeps the room working while it is diagnosed.
-- **How should the scale read with very few submitters?** With two people the
-  levels in use are the third and the fifth, so "one of two is free" already looks
-  fairly strong. It is legible and nobody has complained; whether it should
-  stretch to the ends of the scale instead is a judgement to make while looking at
-  a real room with three or four people in it.
 
 ---
 
@@ -307,6 +321,48 @@ Google's OAuth review needs a reachable privacy page, and there now is one.
 
 ## Recent Decisions
 
+- **2026-08-24 — The heatmap's colour ramp is measured, and a room uses only as
+  many steps as it has people.** The user reported that the greens were all
+  alike; against `bg-zinc-100` the old emerald-100→500 ramp measured 1.03:1 at
+  its palest step and 0.046 of perceptual lightness between its first two, so
+  "one person is free" was the same colour as "nobody is". The ramp is now
+  emerald-500/600/700/900 in light and emerald-800/600/500/300 in dark, each
+  clearing monotone lightness, a 0.06 neighbour gap, 2:1 at the pale end, and a
+  single hue. Five steps was tried first and rejected on sight: the 2:1 floor
+  pins the pale end at emerald-500, which forces a fifth step onto emerald-950,
+  and "everyone is free" then read as a hole in the grid rather than as the
+  answer being hunted for. Independently, the proportional five-step sum meant a
+  room of two used two neighbouring shades three-fifths up the scale;
+  `lib/heatScale.ts` now spreads the steps in use across the whole ramp, so two
+  people get the two ends and the legend shows only the steps in play. Fixing
+  that surfaced a comment that was not true — the top step was said to mean
+  *everyone* and did not above five submitters, where six-of-seven and
+  seven-of-seven landed together. Ten unit tests, sabotaged twice: the old
+  proportional sum fails one of them, an unspread ramp fails four. Looked at as
+  well as measured, in a room of five in both colour schemes. The general rules
+  are in METHOD.md → Verification.
+- **2026-08-24 — The send card moved above the grid, and it is not sticky.**
+  Asked for by the user, who could not tell whether anything had been sent. The
+  painter is the tallest card on the page, so at seven days the send card began
+  below the fold on a phone: the one fact the card exists to report was a scroll
+  past the whole week away. Above the grid it is the first thing under the
+  header, and the cost — after painting you scroll back up to send — is smaller
+  than never finding it. A sticky bar was the alternative and was rejected
+  without being built: it would cover the top row of the grid, which is both a
+  worse gesture target for a real finger and the thing `drive-mobile.mjs`
+  dispatches touch at. Colour carries the state as well as the word, matching
+  `LiveBadge`'s dot idiom rather than inventing one. Two things came out of
+  building it. The card changes height between its states, and above the grid
+  that moved the grid mid-use — proven both ways by the phone probe's scroll
+  assertion, `661 -> 645` without the reserved height and `661 -> 661` with it.
+  And three driver scripts were measuring drag coordinates one end at a time,
+  which the taller page turned into a wrong drag in two of them and a silently
+  wrong one in the third; all three now scroll first. The general rules are in
+  METHOD.md → Conventions and → Verification.
+- **2026-08-24 — `weekly-applied.png` is git-ignored, closing a gap left on
+  2026-08-11.** The other three driver scripts' screenshots were already ignored
+  and this one was not, so it turned up as an untracked file on the first run
+  after the weekly work.
 - **2026-08-11 — The weekly timetable is built, and it is kept on the device
   rather than in the room.** Chosen by the user over starting the OAuth
   connectors. The case that decided it: a real HKUST export ends every course

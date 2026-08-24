@@ -255,10 +255,18 @@ try {
   })
 
   // --- painting with a finger ----------------------------------------------
+  // Scrolled to first, because `boundingBox()` answers in the viewport and not
+  // in the page: once the send card sits above the grid, cell 4 is at y≈700 on
+  // a 664px-tall screen — a real coordinate no finger can reach. The touch then
+  // lands on nothing and the grid reports zero painted cells, which reads as a
+  // broken drag and is a probe aiming off-screen. `before` is taken after the
+  // scroll so the assertion below is about the drag and not about this line.
+  await painter.scrollIntoViewIfNeeded()
+  await page.waitForTimeout(200)
   const before = await page.evaluate(() => window.scrollY)
   const cell = (slot) => painter.locator(`[data-slot="${slot}"]`)
-  const from = await cell(4).boundingBox()
-  const to = await cell(8).boundingBox()
+  const from = await stableBox(cell(4))
+  const to = await stableBox(cell(8))
   await drag(
     { x: from.x + from.width / 2, y: from.y + from.height / 2 },
     { x: to.x + to.width / 2, y: to.y + to.height / 2 },
@@ -272,10 +280,16 @@ try {
         (cells) => cells.filter((c) => c.className.includes('bg-indigo-500')).length,
       )
   const painted = await freeCells()
-  report(painted > 0, 'a finger drag paints slots', `${painted} cells`)
   report(
-    (await page.evaluate(() => window.scrollY)) === before,
+    painted > 0,
+    'a finger drag paints slots',
+    `${painted} cells, tapped at y=${Math.round(from.y)} of ${phone.viewport.height}`,
+  )
+  const after = await page.evaluate(() => window.scrollY)
+  report(
+    after === before,
     'and does not scroll the page while painting',
+    `${before} -> ${after}`,
   )
 
   await page.getByRole('button', { name: 'Send my times' }).click()
