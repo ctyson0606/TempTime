@@ -43,6 +43,54 @@ try {
   await a.getByRole('button', { name: 'Next month' }).click()
   await days.nth(0).click()
 
+  // A mouse sweep picks every day it crosses, and a sweep back from a picked
+  // day clears them again. Done on a row of next month past the day already
+  // picked, and undone, so the three-day room below is unchanged.
+  const picked = () =>
+    a
+      .locator('button[aria-pressed="true"]')
+      .evaluateAll((nodes) => nodes.map((n) => n.dataset.day))
+  const before = (await picked()).join()
+  const cells = await days.evaluateAll((nodes) =>
+    nodes.map((n) => {
+      const r = n.getBoundingClientRect()
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2, date: n.dataset.day }
+    }),
+  )
+  const run = cells.findIndex(
+    (c, i) => i > 0 && i + 3 < cells.length && Math.abs(cells[i + 3].y - c.y) < 1,
+  )
+  const sweep = async (from, to) => {
+    await a.mouse.move(from.x, from.y)
+    await a.mouse.down()
+    await a.mouse.move(to.x, to.y, { steps: 3 })
+    await a.mouse.up()
+  }
+  await sweep(cells[run], cells[run + 3])
+  const swept = await picked()
+  report(
+    cells.slice(run, run + 4).every((c) => swept.includes(c.date)) &&
+      swept.length === before.split(',').length + 4,
+    'a mouse sweep picks the four days it crosses and no others',
+    `${swept.length} picked`,
+  )
+  await sweep(cells[run + 3], cells[run])
+  report(
+    (await picked()).join() === before,
+    'and sweeping back from a picked day clears exactly those four',
+  )
+
+  // The keyboard still picks a day: Enter on a focused day is a click with no
+  // pointer behind it, and the sweep never sees it.
+  await days.nth(run).focus()
+  await a.keyboard.press('Enter')
+  const keyed = (await picked()).includes(cells[run].date)
+  await a.keyboard.press('Enter')
+  report(
+    keyed && (await picked()).join() === before,
+    'Enter on a focused day picks it, and again clears it',
+  )
+
   const chosen = await a.locator('text=/^Selected: /').textContent()
   report(
     (chosen ?? '').split(',').length === 3,

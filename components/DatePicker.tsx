@@ -1,6 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import {
+  type PointerEvent as ReactPointerEvent,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { DateTime } from 'luxon'
 import { WEEKDAY_LABELS, calendarMonths } from '@/lib/calendar'
 import { MAX_ROOM_DAYS, normalizeDates } from '@/lib/dates'
@@ -12,12 +17,38 @@ interface DatePickerProps {
   max?: number
 }
 
+/** A drag in progress: what it writes, and where the pointer last was. */
+interface Sweep {
+  /** Select or deselect, decided by the day the drag started on. */
+  select: boolean
+  /** The selection as this drag has left it so far. */
+  working: Set<string>
+  x: number
+  y: number
+}
+
+/** How far apart to sample a fast drag, in pixels — under half a day cell. */
+const SAMPLE_PX = 12
+
+/** The selectable day under a point, or null. */
+function dayAt(x: number, y: number): string | null {
+  const cell = document.elementFromPoint(x, y)?.closest('[data-day]')
+  if (!(cell instanceof HTMLElement) || cell.dataset.selectable !== 'true') return null
+  return cell.dataset.day ?? null
+}
+
 /**
  * Month-at-a-time multi-select over the selectable window.
  *
  * Days are independent: picking 07-26, 07-27 and 08-15 is normal, not an edge
  * case. One month is shown at a time because the window spans four of them and
  * a four-month wall of dates buries the handful a user actually wants.
+ *
+ * Press and sweep to pick many at once: every day the pointer passes over
+ * follows the day it started on, so a sweep that starts on an unpicked day
+ * picks and one that starts on a picked day clears — the same rule the time
+ * grid paints by. It is built like that grid, on pointer events and
+ * hit-testing, because a finger's events keep going to the day it landed on.
  */
 export default function DatePicker({
   timezone,
@@ -29,6 +60,58 @@ export default function DatePicker({
   const [page, setPage] = useState(0)
   const month = months[page]
   const atLimit = selected.length >= max
+  const sweep = useRef<Sweep | null>(null)
+
+  /** Apply the sweep to one day, respecting the limit when adding. */
+  const touch = (date: string) => {
+    const current = sweep.current
+    if (current === null) return
+    if (current.select === current.working.has(date)) return
+    if (current.select) {
+      if (current.working.size >= max) return
+      current.working.add(date)
+    } else {
+      current.working.delete(date)
+    }
+    // Built from the working set, not from `selected`: several moves can land
+    // before the parent re-renders, and each would otherwise start from the
+    // same stale list and undo the one before it.
+    onChange(normalizeDates([...current.working]))
+  }
+
+  const start = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const date = dayAt(event.clientX, event.clientY)
+    if (date === null) return
+    // Keeps the moves coming once the pointer leaves the day it started on.
+    event.currentTarget.setPointerCapture(event.pointerId)
+    sweep.current = {
+      select: !selected.includes(date),
+      working: new Set(selected),
+      x: event.clientX,
+      y: event.clientY,
+    }
+    touch(date)
+  }
+
+  const extend = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const current = sweep.current
+    if (current === null) return
+    // A fast swipe can cross a whole day between two events, so the straight
+    // line from the last point is sampled rather than only its end.
+    const dx = event.clientX - current.x
+    const dy = event.clientY - current.y
+    const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / SAMPLE_PX))
+    for (let i = 1; i <= steps; i++) {
+      const day = dayAt(current.x + (dx * i) / steps, current.y + (dy * i) / steps)
+      if (day !== null) touch(day)
+    }
+    current.x = event.clientX
+    current.y = event.clientY
+  }
+
+  const finish = () => {
+    sweep.current = null
+  }
 
   const toggle = (date: string) => {
     if (selected.includes(date)) {
@@ -75,7 +158,15 @@ export default function DatePicker({
         ))}
       </div>
 
-      <div className="mt-1 grid grid-cols-7 gap-1">
+      {/* `touch-none` so a finger sweeping the days picks them instead of
+          scrolling the page; the page still scrolls from anywhere else. */}
+      <div
+        className="mt-1 grid touch-none grid-cols-7 gap-1 select-none"
+        onPointerDown={start}
+        onPointerMove={extend}
+        onPointerUp={finish}
+        onPointerCancel={finish}
+      >
         {Array.from({ length: month.leadingBlanks }, (_, i) => (
           <div key={`blank-${i}`} />
         ))}
@@ -87,7 +178,15 @@ export default function DatePicker({
             <button
               key={day.date}
               type="button"
-              onClick={() => toggle(day.date)}
+              data-day={day.date}
+              data-selectable={day.selectable && !(atLimit && !isSelected)}
+              // Pointer presses are handled by the sweep above, which already
+              // toggled this day on pointerdown; acting on the click that
+              // follows would undo it. A click with `detail` 0 comes from the
+              // keyboard, and that one is the only way a key picks a day.
+              onClick={(event) => {
+                if (event.detail === 0) toggle(day.date)
+              }}
               disabled={disabled}
               aria-pressed={isSelected}
               className={[

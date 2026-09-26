@@ -188,7 +188,86 @@ try {
   // a failure that came and went with the calendar date, not with the code.
   // Next month is always whole and always inside the 90-day window.
   await page.getByRole('button', { name: 'Next month' }).click()
-  for (let i = 0; i < 7; i++) await days.nth(i).click()
+
+  // --- sweeping the date picker with a finger -------------------------------
+  // Picked by pressing one day and sweeping across the rest, the way the time
+  // grid is painted. A row of seven is found by position rather than assumed,
+  // because where a month's weeks fall depends on the month — and within a
+  // pixel rather than exactly, because cells on one row report fractionally
+  // different tops and exact equality found no row at all.
+  const dayCells = () =>
+    days.evaluateAll((nodes) =>
+      nodes.map((n) => {
+        const r = n.getBoundingClientRect()
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2, date: n.dataset.day }
+      }),
+    )
+  const picked = () =>
+    page
+      .locator('button[aria-pressed="true"]')
+      .evaluateAll((nodes) => nodes.map((n) => n.dataset.day))
+  // Wait for the month to have turned: measured straight after the click, the
+  // cells were still this month's, and late in a month they hold no full row.
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector('button[aria-pressed]:not([disabled])')
+        ?.getAttribute('data-day')
+        ?.endsWith('-01'),
+    null,
+    { timeout: 5000 },
+  )
+  let cells = await dayCells()
+  const run = cells.findIndex(
+    (c, i) => i + 6 < cells.length && Math.abs(cells[i + 6].y - c.y) < 1,
+  )
+  if (run < 0) {
+    throw new Error(
+      `no row of seven selectable days next month: ${cells.map((c) => `${c.date}@${Math.round(c.y)}`).join(' ')}`,
+    )
+  }
+  await days.nth(run + 6).scrollIntoViewIfNeeded()
+  await days.nth(run).scrollIntoViewIfNeeded()
+  cells = await dayCells()
+  const row = cells.slice(run, run + 7)
+  const dates = (from, to) =>
+    row
+      .slice(from, to)
+      .map((c) => c.date)
+      .join()
+
+  // Two moves for six cells: each move jumps about three days, so only a sweep
+  // that fills in the path between events picks the ones in the middle.
+  const scrolledBefore = await page.evaluate(() => window.scrollY)
+  await drag(row[0], row[6], 2)
+  report(
+    (await picked()).join() === dates(0, 7),
+    'a fast sweep across a week picks all seven days and nothing either side',
+    `${(await picked()).length} picked`,
+  )
+  report(
+    (await page.evaluate(() => window.scrollY)) === scrolledBefore,
+    'and sweeping the days does not scroll the page',
+  )
+
+  // Starting on a picked day clears instead, all the way along.
+  await drag(row[6], row[4], 2)
+  report(
+    (await picked()).join() === dates(0, 4),
+    'a sweep that starts on a picked day clears the days it crosses',
+    `${(await picked()).length} left`,
+  )
+
+  // A tap is a sweep of one day, and toggles it exactly once — the click that
+  // follows the touch must not toggle it back.
+  await drag(row[4], row[4], 1)
+  report(
+    (await picked()).join() === dates(0, 5),
+    'a tap still picks exactly one day',
+    `${(await picked()).length} picked`,
+  )
+  await drag(row[5], row[6], 2)
+
   const chosen = await page.locator('text=/^Selected: /').textContent()
   report(
     (chosen ?? '').split(',').length === 7,
