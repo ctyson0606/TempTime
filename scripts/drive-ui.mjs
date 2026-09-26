@@ -212,11 +212,34 @@ try {
   const painted = await freeCells()
   report(painted > 0, 'dragging marks slots on the grid', `${painted} cells`)
 
+  // The key above the grid has to tell the truth in the grid's own colours:
+  // "Free" matches a painted cell and "Not free" an unpainted one. Checked
+  // again after a swap, because that is when someone wonders which way round
+  // the grid now is — the answer has to be the same key, not a flipped one.
+  const painterKey = b.locator('[data-painter-key]')
+  const bg = (loc) => loc.evaluate((n) => getComputedStyle(n).backgroundColor)
+  const swatch = (label) =>
+    painterKey.getByText(label, { exact: true }).locator('span').first()
+  const keyMatches = async (freeSlot, notFreeSlot) => {
+    const [keyFree, keyNot, cellFree, cellNot] = await Promise.all([
+      bg(swatch('Free')),
+      bg(swatch('Not free')),
+      bg(painter.locator(`[data-slot="${freeSlot}"]`)),
+      bg(painter.locator(`[data-slot="${notFreeSlot}"]`)),
+    ])
+    return keyFree === cellFree && keyNot === cellNot && keyFree !== keyNot
+  }
+  report(
+    await keyMatches(4, 0),
+    'the key above the grid says coloured is free, in the grid’s own colours',
+  )
+
   // The swap is what replaces a busy/free mode, so it has to be arithmetic rather
   // than "something changed": every slot flips, and twice is a no-op.
   const gridCells = await painter.locator('[data-slot]').count()
   await b.getByRole('button', { name: 'Swap free ↔ not free' }).click()
   const inverted = await freeCells()
+  report(await keyMatches(0, 4), 'after a swap the key still reads coloured as free')
   report(
     inverted === gridCells - painted,
     'swapping flips every slot rather than some of them',

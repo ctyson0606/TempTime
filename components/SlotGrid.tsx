@@ -107,7 +107,8 @@ const SIZES: Record<
  */
 export const GRID_CARD_WIDTH = 'mx-auto w-fit max-w-full'
 
-const EMPTY_CELL = 'bg-zinc-100 dark:bg-zinc-800/60'
+/** The look of a cell with nothing on it. Exported so a key can show the same one. */
+export const EMPTY_CELL = 'bg-zinc-100 dark:bg-zinc-800/60'
 
 interface SlotGridProps {
   room: RoomGrid

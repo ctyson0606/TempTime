@@ -6,6 +6,7 @@ import { type RoomGrid, emptyMask, fullMask, invertMask, totalSlots } from '@/li
 import { isMarked, markedCount, maskToBlocks } from '@/lib/providers/manual'
 import { isPaged } from '@/lib/dayPages'
 import GridPainter from './GridPainter'
+import { EMPTY_CELL } from './SlotGrid'
 import RoomDays from './RoomDays'
 import type { GridSize } from './SlotGrid'
 
@@ -67,15 +68,32 @@ export default function ManualPainter({
     <div className="flex flex-col gap-3">
       <RoomDays room={room} label="Pick days to paint" purpose="mark when you are free">
         {(days) => (
-          <GridPainter
-            room={room}
-            mask={mask}
-            onChange={onChange}
-            size={size}
-            label="Your free times"
-            markedClass={markedClass}
-            days={days}
-          />
+          <>
+            {/* What a coloured cell means, said before the grid is read. There
+                is one meaning and no mode — coloured is free, whatever was
+                painted or swapped to get there — but nothing on screen said
+                so, and after a swap it was fair to wonder which way round the
+                grid now was. Only beside a grid, like the results' readout. */}
+            <div
+              data-painter-key
+              className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500"
+            >
+              <KeyItem className={FREE}>Free</KeyItem>
+              <KeyItem className={EMPTY_CELL}>Not free</KeyItem>
+              {pending !== null && (
+                <KeyItem className={PENDING_REMOVAL}>Will be taken out</KeyItem>
+              )}
+            </div>
+            <GridPainter
+              room={room}
+              mask={mask}
+              onChange={onChange}
+              size={size}
+              label="Your free times"
+              markedClass={markedClass}
+              days={days}
+            />
+          </>
         )}
       </RoomDays>
 
@@ -122,6 +140,21 @@ export default function ManualPainter({
         </ul>
       )}
     </div>
+  )
+}
+
+function KeyItem({
+  className,
+  children,
+}: {
+  className: string
+  children: React.ReactNode
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span aria-hidden className={`h-3.5 w-5 rounded-sm ${className}`} />
+      {children}
+    </span>
   )
 }
 
