@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aggregate, findBestSlots } from '../lib/aggregate'
+import { aggregate, dayPeaks, findBestSlots } from '../lib/aggregate'
 
 describe('aggregate', () => {
   it('returns correctly shaped arrays when nobody has submitted', () => {
@@ -113,5 +113,37 @@ describe('findBestSlots', () => {
     expect(findBestSlots([1, 1, 1], 1, opts)).toEqual([
       { startSlot: 0, endSlot: 3, freeCount: 1, isEveryone: true },
     ])
+  })
+})
+
+describe('dayPeaks', () => {
+  // Three days of four slots each.
+  const counts = [
+    ...[1, 3, 3, 0], // peak 3, reached twice
+    ...[2, 2, 0, 2], // peak 2, reached three times, not all in one run
+    ...[0, 0, 0, 0], // nobody at all
+  ]
+
+  it("reports each day's peak and how many slots reach it", () => {
+    expect(dayPeaks(counts, 4)).toEqual([
+      { best: 3, slots: 2 },
+      { best: 2, slots: 3 },
+      { best: 0, slots: 0 },
+    ])
+  })
+
+  it('keeps days apart, so a peak cannot leak into the next day', () => {
+    // The 3s sit at the end of day 0; a window that ignored the day boundary
+    // would credit day 1 with them.
+    const edge = [0, 0, 3, 3, 1, 1, 1, 1]
+    expect(dayPeaks(edge, 4)).toEqual([
+      { best: 3, slots: 2 },
+      { best: 1, slots: 4 },
+    ])
+  })
+
+  it('refuses counts that do not divide into whole days', () => {
+    expect(() => dayPeaks([1, 2, 3], 2)).toThrow(RangeError)
+    expect(() => dayPeaks([1, 2], 0)).toThrow(RangeError)
   })
 })

@@ -1,5 +1,6 @@
 import type { PointerEventHandler } from 'react'
 import { DateTime } from 'luxon'
+import type { DayRange } from '@/lib/dayPages'
 import { ISO_DATE } from '@/lib/dates'
 import { formatMinuteOfDay } from '@/lib/room'
 import { type RoomGrid, slotsPerDay } from '@/lib/slots'
@@ -118,6 +119,14 @@ interface SlotGridProps {
    * the pattern is about that day.
    */
   weekdayOnly?: boolean
+  /**
+   * Draw only these days. Omitted, every day is drawn.
+   *
+   * Cells keep their room-wide slot index either way, so whatever reads
+   * `data-slot` — a painter, a readout, a probe — never has to know which page
+   * it is on.
+   */
+  days?: DayRange
   /** Look of the cell at `slot`. Return nothing for the plain empty cell. */
   cellClass?: (slot: number) => string | undefined
   /**
@@ -143,6 +152,7 @@ export default function SlotGrid({
   size = 'medium',
   label,
   weekdayOnly = false,
+  days,
   cellClass,
   onPointerDown,
   onPointerMove,
@@ -159,15 +169,24 @@ export default function SlotGrid({
     style.labelEveryMin === null || minute % style.labelEveryMin === 0
   const paintable = onPointerDown !== undefined
 
-  const columns = room.dates.map((date, index) => {
+  const first = days?.first ?? 0
+  const count = days?.count ?? room.dates.length
+
+  // A page's first column gets no break before it even when the previous page's
+  // last day was weeks earlier: that day is not on screen to be mistaken for a
+  // neighbour.
+  const columns = room.dates.slice(first, first + count).map((date, offset) => {
+    const dayIndex = first + offset
     const day = DateTime.fromFormat(date, ISO_DATE, { zone: room.timezone })
     const previous =
-      index === 0
+      offset === 0
         ? null
-        : DateTime.fromFormat(room.dates[index - 1], ISO_DATE, { zone: room.timezone })
+        : DateTime.fromFormat(room.dates[dayIndex - 1], ISO_DATE, {
+            zone: room.timezone,
+          })
     const skipped =
       previous === null ? 0 : Math.round(day.diff(previous, 'days').days) - 1
-    return { date, day, skipped }
+    return { date, day, dayIndex, skipped }
   })
 
   return (
@@ -189,7 +208,7 @@ export default function SlotGrid({
           ))}
         </div>
 
-        {columns.map(({ date, day, skipped }, dayIndex) => (
+        {columns.map(({ date, day, dayIndex, skipped }) => (
           <div key={date} className="flex">
             {skipped > 0 && (
               <div

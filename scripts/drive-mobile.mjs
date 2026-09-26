@@ -181,7 +181,13 @@ try {
   await page.waitForSelector('button[aria-pressed]', { timeout: 15000 })
 
   await page.getByPlaceholder('Weekend dinner').fill('Mobile pass')
-  // Seven days: the maximum, and the width the layout is worst at.
+  // Seven days: one full page, and the width the layout is worst at.
+  //
+  // From next month, not this one. Late in a month fewer than seven days of it
+  // are left to pick, and clicking the sixth of five waited out its timeout —
+  // a failure that came and went with the calendar date, not with the code.
+  // Next month is always whole and always inside the 90-day window.
+  await page.getByRole('button', { name: 'Next month' }).click()
   for (let i = 0; i < 7; i++) await days.nth(i).click()
   const chosen = await page.locator('text=/^Selected: /').textContent()
   report(
@@ -361,9 +367,9 @@ try {
   })
   await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
   await page.waitForTimeout(300)
-  // Scoped to the readout itself. An unscoped text match finds the heading
-  // "When everyone is free" and reports success whether or not this line ever
-  // renders — which is what the first version of this assertion did.
+  // Scoped to the readout itself. An unscoped text match found the section's
+  // old heading, "When everyone is free", and reported success whether or not
+  // this line ever rendered — which is what the first version of this did.
   const readout = (await page.locator('[data-readout]').textContent()) ?? ''
   report(
     /\d+ of \d+ free|everyone is free \(|nobody is free/.test(readout),

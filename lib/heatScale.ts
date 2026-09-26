@@ -56,3 +56,31 @@ export function rankFor(
   const rank = Math.ceil((free / (submittedCount - 1)) * top) - 1
   return Math.min(Math.max(rank, 0), top - 1)
 }
+
+/** The counts one step of the ramp stands for, inclusive. */
+export interface StepRange {
+  min: number
+  max: number
+}
+
+/**
+ * What each step in use means in people, in the same order as `stepsInUse`.
+ *
+ * A legend that shows swatches without numbers asks the reader to work out the
+ * scale from its ends, and past four submitters a step stands for a range —
+ * seven people put 1–2, 3–4, 5–6 and 7 on the four steps — which no reader
+ * could infer. Derived from `rankFor` itself rather than restated, so the
+ * legend cannot describe a different scale from the one the cells are drawn
+ * with.
+ */
+export function stepRanges(submittedCount: number, rampLength: number): StepRange[] {
+  const ranges: StepRange[] = []
+  for (let free = 1; free <= submittedCount; free++) {
+    const rank = rankFor(free, submittedCount, rampLength)
+    if (rank < 0) continue
+    const range = ranges[rank]
+    if (range === undefined) ranges[rank] = { min: free, max: free }
+    else range.max = free
+  }
+  return ranges
+}

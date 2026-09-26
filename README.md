@@ -54,6 +54,7 @@ publishable/secret pair, not the legacy anon/service_role pair beside it.
    | `supabase/migrations/0001_init.sql` | The three tables and their cascades |
    | `supabase/migrations/0002_rls.sql` | Policies **and** the explicit grants |
    | `supabase/migrations/0003_cron.sql` | The hourly purge of expired rooms |
+   | `supabase/migrations/0004_room_days.sql` | Lets a room cover up to 91 days instead of 7 |
 
    They are written to be re-runnable, so applying one twice is safe.
 
@@ -157,6 +158,7 @@ below. **They are development-only: they write to whatever database
 | `drive-ui.mjs` | `BASE_URL` | The room lifecycle in two browser contexts, including the four ways a room can be gone |
 | `drive-heatmap.mjs` | `BASE_URL` | The overlay, the live socket, and the polling fallback |
 | `drive-mobile.mjs` | `BASE_URL` | A phone-sized touch context: layout, tap targets, finger painting, the tap readout |
+| `drive-pages.mjs` | `BASE_URL`, migration `0004` | A room longer than a week: its calendar, zooming into a page of days, and that a page keeps room-wide slot numbers |
 
 ```sh
 node scripts/drive-ui.mjs                       # defaults to localhost:3000

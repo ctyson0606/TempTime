@@ -38,6 +38,38 @@ export function calendarMonths(
   now: DateTime = DateTime.utc(),
 ): CalendarMonth[] {
   const { first, last } = selectionWindow(timezone, now)
+  return monthsBetween(first, last, timezone, (date) =>
+    isSelectable(date, timezone, now),
+  )
+}
+
+/**
+ * The months a room's dates fall in, with only those dates selectable.
+ *
+ * The same whole-month layout as the picker that chose them, so a room's
+ * overview reads as the calendar its creator clicked on. Months in between
+ * that hold none of the dates are still emitted: skipping one would put August
+ * directly after June and make the gap look like two adjacent months.
+ */
+export function roomMonths(
+  dates: readonly string[],
+  timezone: string,
+): CalendarMonth[] {
+  if (dates.length === 0) {
+    throw new RangeError('a room with no dates has no calendar')
+  }
+  const chosen = new Set(dates)
+  return monthsBetween(dates[0], dates[dates.length - 1], timezone, (date) =>
+    chosen.has(date),
+  )
+}
+
+function monthsBetween(
+  first: string,
+  last: string,
+  timezone: string,
+  selectable: (date: string) => boolean,
+): CalendarMonth[] {
   const start = DateTime.fromFormat(first, ISO_DATE, { zone: timezone })
   if (!start.isValid) {
     throw new RangeError(`invalid timezone: ${timezone}`)
@@ -54,11 +86,7 @@ export function calendarMonths(
     const days: CalendarDay[] = []
     for (let day = 1; day <= cursor.daysInMonth!; day++) {
       const date = cursor.set({ day }).toFormat(ISO_DATE)
-      days.push({
-        date,
-        dayOfMonth: day,
-        selectable: isSelectable(date, timezone, now),
-      })
+      days.push({ date, dayOfMonth: day, selectable: selectable(date) })
     }
 
     months.push({

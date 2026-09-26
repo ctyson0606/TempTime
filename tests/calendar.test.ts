@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon'
 import { describe, expect, it } from 'vitest'
-import { WEEKDAY_LABELS, calendarMonths } from '../lib/calendar'
+import { WEEKDAY_LABELS, calendarMonths, roomMonths } from '../lib/calendar'
 
 /** 2026-07-25 18:00 in Taipei — comfortably inside one calendar day everywhere. */
 const now = DateTime.fromISO('2026-07-25T10:00:00Z')
@@ -71,5 +71,37 @@ describe('calendarMonths', () => {
 
   it('rejects an unknown timezone rather than rendering an empty picker', () => {
     expect(() => calendarMonths('Mars/Olympus')).toThrow(RangeError)
+  })
+})
+
+describe('roomMonths', () => {
+  const dates = ['2026-07-30', '2026-09-02', '2026-09-03']
+  const days = () => roomMonths(dates, taipei).flatMap((m) => m.days)
+
+  it("makes the room's dates selectable and nothing else", () => {
+    const selectable = days()
+      .filter((d) => d.selectable)
+      .map((d) => d.date)
+    expect(selectable).toEqual(dates)
+  })
+
+  it('keeps a month that holds none of the dates, so a gap does not vanish', () => {
+    // August has none of them. Dropping it would put September straight after
+    // July and make five weeks read as a few days.
+    expect(roomMonths(dates, taipei).map((m) => m.key)).toEqual([
+      '2026-07',
+      '2026-08',
+      '2026-09',
+    ])
+  })
+
+  it('emits whole months, laid out like the picker that chose them', () => {
+    const [july] = roomMonths(dates, taipei)
+    expect(july.days).toHaveLength(31)
+    expect(july.leadingBlanks).toBe(3)
+  })
+
+  it('refuses a room with no dates', () => {
+    expect(() => roomMonths([], taipei)).toThrow(RangeError)
   })
 })

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useBrowserValue } from '@/lib/browser'
-import { MAX_ROOM_DAYS, validateDates } from '@/lib/dates'
+import { SELECTION_WINDOW_DAYS, validateDates } from '@/lib/dates'
 import {
   DEFAULT_DAY_END_MIN,
   DEFAULT_DAY_START_MIN,
@@ -126,8 +126,8 @@ export default function CreateRoomForm() {
 
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium">
-          Days — any {MAX_ROOM_DAYS} within the next 90, and they need not be next to
-          each other
+          Days — any within the next {SELECTION_WINDOW_DAYS}, and they need not be next
+          to each other
         </span>
         <div className="rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
           <DatePicker timezone={timezone} selected={dates} onChange={setDates} />

@@ -132,3 +132,53 @@ export function findBestSlots(
 
   return rank(runsWithinDays(freeCounts, best, slotsPerDay), 1, best)
 }
+
+export interface DayPeak {
+  /** The most submitters free at the same time at any point that day. */
+  best: number
+  /** How many of that day's slots reach `best`. Zero when `best` is zero. */
+  slots: number
+}
+
+/**
+ * Each day's best moment, for a view too coarse to show slots.
+ *
+ * A calendar of a room's dates has one cell per day, and the question that
+ * cell has to answer is "is this day worth opening?" — which is the peak, not
+ * the average. A day where everyone is free for one hour beats a day where
+ * everyone but one is free all evening, and averaging would rank them the
+ * other way round.
+ *
+ * `slots` counts every slot at the peak, not the longest run of them, so it
+ * says how much of the day reaches that level rather than how long any one
+ * meeting could be; the zoomed grid is where runs are read.
+ */
+export function dayPeaks(
+  freeCounts: readonly number[],
+  slotsPerDay: number,
+): DayPeak[] {
+  if (!Number.isInteger(slotsPerDay) || slotsPerDay <= 0) {
+    throw new RangeError(`slotsPerDay must be a positive integer, got ${slotsPerDay}`)
+  }
+  if (freeCounts.length % slotsPerDay !== 0) {
+    throw new RangeError(
+      `${freeCounts.length} counts do not divide into days of ${slotsPerDay}`,
+    )
+  }
+
+  const peaks: DayPeak[] = []
+  for (let start = 0; start < freeCounts.length; start += slotsPerDay) {
+    let best = 0
+    let slots = 0
+    for (let i = start; i < start + slotsPerDay; i++) {
+      if (freeCounts[i] > best) {
+        best = freeCounts[i]
+        slots = 1
+      } else if (freeCounts[i] === best && best > 0) {
+        slots++
+      }
+    }
+    peaks.push({ best, slots })
+  }
+  return peaks
+}

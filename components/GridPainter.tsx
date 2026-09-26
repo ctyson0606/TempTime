@@ -1,6 +1,7 @@
 'use client'
 
 import { type PointerEvent as ReactPointerEvent, useMemo, useState } from 'react'
+import type { DayRange } from '@/lib/dayPages'
 import type { RoomGrid } from '@/lib/slots'
 import { blockSlots, isMarked, paintBlock } from '@/lib/providers/manual'
 import SlotGrid, { type GridSize, slotAt, slotAtPoint } from './SlotGrid'
@@ -20,6 +21,11 @@ interface GridPainterProps {
   markedClass: (slot: number) => string
   /** Draw weekday names without dates, for a grid that is not about real days. */
   weekdayOnly?: boolean
+  /**
+   * Draw only these days. A drag can then only reach cells on this page, and
+   * what it writes lands at the same room-wide indices it would without paging.
+   */
+  days?: DayRange
 }
 
 interface Drag {
@@ -57,6 +63,7 @@ export default function GridPainter({
   size = 'medium',
   markedClass,
   weekdayOnly = false,
+  days,
 }: GridPainterProps) {
   const [drag, setDrag] = useState<Drag | null>(null)
 
@@ -101,6 +108,7 @@ export default function GridPainter({
       size={size}
       label={label}
       weekdayOnly={weekdayOnly}
+      days={days}
       cellClass={cellClass}
       onPointerDown={start}
       onPointerMove={extend}

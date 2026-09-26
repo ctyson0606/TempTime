@@ -50,6 +50,7 @@ Supabase 主控台的哪一個分頁取得——是 publishable/secret 這一組
    | `supabase/migrations/0001_init.sql` | 三張資料表與它們的連鎖刪除 |
    | `supabase/migrations/0002_rls.sql` | 政策**以及**明確的權限授予 |
    | `supabase/migrations/0003_cron.sql` | 每小時清除過期房間 |
+   | `supabase/migrations/0004_room_days.sql` | 讓一個房間最多涵蓋 91 天，而不是 7 天 |
 
    這些檔案都寫成可重複執行，所以同一個跑兩次是安全的。
 
@@ -145,6 +146,7 @@ npm run format:check
 | `drive-ui.mjs` | `BASE_URL` | 兩個瀏覽器情境下的房間生命週期，包含房間消失的四種情況 |
 | `drive-heatmap.mjs` | `BASE_URL` | 疊圖、即時連線，以及輪詢備援 |
 | `drive-mobile.mjs` | `BASE_URL` | 手機尺寸的觸控情境：版面、點擊目標、手指塗色、點擊讀數 |
+| `drive-pages.mjs` | `BASE_URL`、migration `0004` | 超過一週的房間：日期月曆、放大成一頁的天數，以及每頁沿用整個房間的格子編號 |
 
 ```sh
 node scripts/drive-ui.mjs                       # 預設 localhost:3000

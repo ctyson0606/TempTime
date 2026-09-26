@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { rankFor, stepsInUse } from '../lib/heatScale'
+import { rankFor, stepRanges, stepsInUse } from '../lib/heatScale'
 
 /**
  * The ramp the component ships. Its length is a parameter rather than a
@@ -80,5 +80,40 @@ describe('rankFor', () => {
     // from the palest colour rather than sharing it.
     expect(rankFor(0, 4, RAMP)).toBe(-1)
     expect(rankFor(0, 0, RAMP)).toBe(-1)
+  })
+})
+
+describe('stepRanges', () => {
+  it('gives each step one count while there are no more people than steps', () => {
+    expect(stepRanges(3, 4)).toEqual([
+      { min: 1, max: 1 },
+      { min: 2, max: 2 },
+      { min: 3, max: 3 },
+    ])
+  })
+
+  it('spreads partial answers into ranges and keeps the top for everyone', () => {
+    // Seven people on four steps: the one range a reader cannot guess.
+    expect(stepRanges(7, 4)).toEqual([
+      { min: 1, max: 2 },
+      { min: 3, max: 4 },
+      { min: 5, max: 6 },
+      { min: 7, max: 7 },
+    ])
+  })
+
+  it('has one range per step in use, and together they cover 1..N once', () => {
+    for (let n = 1; n <= 12; n++) {
+      const ranges = stepRanges(n, 4)
+      expect(ranges).toHaveLength(stepsInUse(n, 4).length)
+      const covered = ranges.flatMap(({ min, max }) =>
+        Array.from({ length: max - min + 1 }, (_, i) => min + i),
+      )
+      expect(covered).toEqual(Array.from({ length: n }, (_, i) => i + 1))
+    }
+  })
+
+  it('is empty before anyone answers', () => {
+    expect(stepRanges(0, 4)).toEqual([])
   })
 })

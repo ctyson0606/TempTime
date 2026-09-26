@@ -1,16 +1,19 @@
 import { DateTime, IANAZone } from 'luxon'
 
-/**
- * Upper bound on how many days a single room may cover.
- *
- * Deliberately one constant, because the product intends to raise it. Note that
- * `supabase/migrations/0001_init.sql` repeats the number in a CHECK constraint,
- * so raising it here alone is not enough — see PLAN.md section 14.
- */
-export const MAX_ROOM_DAYS = 7
-
 /** How far ahead a room may reach, counted from today in the room's timezone. */
 export const SELECTION_WINDOW_DAYS = 90
+
+/**
+ * Upper bound on how many days a single room may cover: every day the window
+ * offers, today included, so in practice the window is the only limit.
+ *
+ * Kept as a check of its own rather than dropped, because it runs before the
+ * per-date loop and so bounds the work a hostile request can ask for. Note
+ * that the database repeats the number in a CHECK constraint
+ * (`supabase/migrations/0004_room_days.sql`), so changing it here alone is not
+ * enough — see PLAN.md section 14.
+ */
+export const MAX_ROOM_DAYS = SELECTION_WINDOW_DAYS + 1
 
 /** The only date format that crosses a boundary in this project. */
 export const ISO_DATE = 'yyyy-MM-dd'

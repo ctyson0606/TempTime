@@ -8,8 +8,9 @@ create table rooms (
   code               text not null unique,
   title              text,
   timezone           text not null,
-  -- The upper bound repeats MAX_ROOM_DAYS from lib/dates.ts. It is the only
-  -- place that constant lives outside TypeScript; raising it needs a migration.
+  -- The upper bound repeats MAX_ROOM_DAYS from lib/dates.ts, as it stood when
+  -- this file was written. 0004_room_days.sql raises it to 91 and is now the
+  -- place that constant lives outside TypeScript.
   dates              date[] not null check (array_length(dates, 1) between 1 and 7),
   day_start_min      int  not null default 480,
   day_end_min        int  not null default 1440,

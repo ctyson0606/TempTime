@@ -4,7 +4,9 @@ import { useMemo } from 'react'
 import { DateTime } from 'luxon'
 import { type RoomGrid, emptyMask, fullMask, invertMask, totalSlots } from '@/lib/slots'
 import { isMarked, markedCount, maskToBlocks } from '@/lib/providers/manual'
+import { isPaged } from '@/lib/dayPages'
 import GridPainter from './GridPainter'
+import RoomDays from './RoomDays'
 import type { GridSize } from './SlotGrid'
 
 interface ManualPainterProps {
@@ -55,18 +57,27 @@ export default function ManualPainter({
     pending !== null && isMarked(pending, slot) ? PENDING_REMOVAL : FREE
 
   const marked = markedCount(mask)
+  // On a paged room these reach every day, not only the page in view, so they
+  // say how many. A button that looks the same whether it clears one week or
+  // thirteen is the one someone presses expecting the smaller.
+  const reach = isPaged(room.dates.length) ? ` ${room.dates.length} days` : ''
   const blocks = useMemo(() => maskToBlocks(room, mask), [room, mask])
 
   return (
     <div className="flex flex-col gap-3">
-      <GridPainter
-        room={room}
-        mask={mask}
-        onChange={onChange}
-        size={size}
-        label="Your free times"
-        markedClass={markedClass}
-      />
+      <RoomDays room={room} label="Pick days to paint" purpose="mark when you are free">
+        {(days) => (
+          <GridPainter
+            room={room}
+            mask={mask}
+            onChange={onChange}
+            size={size}
+            label="Your free times"
+            markedClass={markedClass}
+            days={days}
+          />
+        )}
+      </RoomDays>
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
         <p className="text-xs text-zinc-500">
@@ -84,7 +95,7 @@ export default function ManualPainter({
             onClick={() => onChange(fullMask(room))}
             disabled={marked === totalSlots(room)}
           >
-            Select all
+            Select all{reach}
           </PainterAction>
           <PainterAction onClick={() => onChange(invertMask(mask))}>
             Invert
@@ -93,7 +104,7 @@ export default function ManualPainter({
             onClick={() => onChange(emptyMask(room))}
             disabled={marked === 0}
           >
-            Clear all
+            Clear all{reach}
           </PainterAction>
         </div>
       </div>

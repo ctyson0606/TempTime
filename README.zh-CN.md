@@ -49,6 +49,7 @@ Supabase 控制台的哪一个标签页获取——是 publishable/secret 这一
    | `supabase/migrations/0001_init.sql` | 三张表与它们的级联删除 |
    | `supabase/migrations/0002_rls.sql` | 策略**以及**显式的权限授予 |
    | `supabase/migrations/0003_cron.sql` | 每小时清除过期房间 |
+   | `supabase/migrations/0004_room_days.sql` | 让一个房间最多涵盖 91 天，而不是 7 天 |
 
    这些文件都写成可重复执行，所以同一个跑两次是安全的。
 
@@ -144,6 +145,7 @@ npm run format:check
 | `drive-ui.mjs` | `BASE_URL` | 两个浏览器上下文下的房间生命周期，包含房间消失的四种情况 |
 | `drive-heatmap.mjs` | `BASE_URL` | 叠加图、实时连接，以及轮询兜底 |
 | `drive-mobile.mjs` | `BASE_URL` | 手机尺寸的触控上下文：布局、点击目标、手指涂色、点击读数 |
+| `drive-pages.mjs` | `BASE_URL`、migration `0004` | 超过一周的房间：日期月历、放大成一页的天数，以及每页沿用整个房间的格子编号 |
 
 ```sh
 node scripts/drive-ui.mjs                       # 默认 localhost:3000

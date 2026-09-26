@@ -253,8 +253,9 @@ try {
   // --- hovering reads a slot out -------------------------------------------
   const cell = await cellBox(bHeat, 7)
   await b.mouse.move(cell.x + cell.width / 2, cell.y + cell.height / 2)
-  // The em dash keeps this off the section heading "When everyone is free",
-  // which the first version of this matched instead of the readout.
+  // The em dash keeps this off any heading that shares the words: the first
+  // version of this matched the old section heading "When everyone is free"
+  // instead of the readout.
   const readoutLine = b.getByText(/— everyone is free/)
   await readoutLine.waitFor({ timeout: 5000 })
   report(true, 'hovering a slot everyone is free for says so')

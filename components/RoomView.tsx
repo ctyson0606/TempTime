@@ -47,6 +47,7 @@ import JoinDialog from './JoinDialog'
 import MemberList from './MemberList'
 import QrDialog from './QrDialog'
 import RoomAdminBar from './RoomAdminBar'
+import RoomDays from './RoomDays'
 import SlotGrid, { GRID_CARD_WIDTH, GRID_SIZES, type GridSize } from './SlotGrid'
 
 /** Every section but the grid keeps to a comfortable reading width. */
@@ -147,6 +148,9 @@ export default function RoomView({ code }: { code: string }) {
   const [joinError, setJoinError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
   const [submittedAt, setSubmittedAt] = useState<string | null>(null)
+  // What was last sent, as free time — the grid's polarity, so it can be
+  // compared with the grid directly. Null when nothing is on the server.
+  const [sentMask, setSentMask] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [heatmap, setHeatmap] = useState<HeatmapData | null>(null)
@@ -222,6 +226,9 @@ export default function RoomView({ code }: { code: string }) {
     fetchMySubmission(code, token).then((result) => {
       if (cancelled || !result.ok) return
       setSubmittedAt(result.data.updatedAt)
+      setSentMask(
+        result.data.busyMask === null ? null : invertMask(result.data.busyMask),
+      )
       // Seed the grid from what was sent, but never over a local draft: an
       // unsent edit is the more recent intention of the two. Inverted on the way
       // in — the API speaks busy time, the grid speaks free time, and this is
@@ -308,6 +315,7 @@ export default function RoomView({ code }: { code: string }) {
     }
     setSubmitError(null)
     setSubmittedAt(result.data.updatedAt)
+    setSentMask(free)
     void refreshHeatmap()
   }
 
@@ -323,6 +331,7 @@ export default function RoomView({ code }: { code: string }) {
     }
     setSubmitError(null)
     setSubmittedAt(null)
+    setSentMask(null)
     void refreshHeatmap()
   }
 
@@ -439,6 +448,15 @@ export default function RoomView({ code }: { code: string }) {
    * — the member list then shows them as still to answer, which is true.
    */
   const nothingOffered = !mask.includes('1')
+  /**
+   * Sent, and the grid has moved on since. Without this the card stayed green
+   * through every later edit, so someone who had sent once and then changed
+   * their mind was told "Sent" about times nobody else could see. Amber again,
+   * because what matters is that the current answer has not gone out; the
+   * last-sent line underneath is what says an earlier one did.
+   */
+  const unsent = submittedAt !== null && sentMask !== null && mask !== sentMask
+  const upToDate = submittedAt !== null && !unsent
 
   return (
     <div className="flex flex-col gap-6">
@@ -473,7 +491,7 @@ export default function RoomView({ code }: { code: string }) {
            free, and the line beside it says why. */
         <section
           className={`${COLUMN} rounded-2xl border p-4 ${
-            submittedAt === null
+            !upToDate
               ? 'border-amber-300 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/25'
               : 'border-emerald-300 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/25'
           }`}
@@ -489,10 +507,14 @@ export default function RoomView({ code }: { code: string }) {
                 <span
                   aria-hidden
                   className={`h-2.5 w-2.5 rounded-full ${
-                    submittedAt === null ? 'bg-amber-500' : 'bg-emerald-500'
+                    upToDate ? 'bg-emerald-500' : 'bg-amber-500'
                   }`}
                 />
-                {submittedAt === null ? 'Not sent yet' : 'Sent'}
+                {submittedAt === null
+                  ? 'Not sent yet'
+                  : unsent
+                    ? 'Changes not sent yet'
+                    : 'Sent'}
               </h2>
               {/* Reserves the tallest of the three lines below, the way the
                   heatmap's readout does. This card sits *above* the grid now,
@@ -518,8 +540,16 @@ export default function RoomView({ code }: { code: string }) {
                         {new Date(submittedAt).toLocaleString()}
                       </time>
                     </p>
+                    {/* The same length as the line it replaces, give or take,
+                        so the first edit after sending changes the words and
+                        not the height: this card sits above the grid being
+                        edited. */}
                     <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
-                      Send again any time to change it.
+                      {!unsent
+                        ? 'Send again any time to change it.'
+                        : nothingOffered
+                          ? 'Mark a slot to send, or withdraw.'
+                          : 'Your edits since then are not sent yet.'}
                     </p>
                   </>
                 )}
@@ -546,7 +576,9 @@ export default function RoomView({ code }: { code: string }) {
                   ? 'Sending…'
                   : submittedAt === null
                     ? 'Send my times'
-                    : 'Send again'}
+                    : unsent
+                      ? 'Send changes'
+                      : 'Send again'}
               </button>
             </div>
           </div>
@@ -572,9 +604,15 @@ export default function RoomView({ code }: { code: string }) {
           </div>
         </div>
         {displayName === null ? (
-          // Marking busy time belongs to a member, and the join dialog is
+          // Marking free time belongs to a member, and the join dialog is
           // covering the page until there is one.
-          <SlotGrid room={room} size={gridSize} />
+          <RoomDays
+            room={room}
+            label="Pick days to paint"
+            purpose="mark when you are free"
+          >
+            {(days) => <SlotGrid room={room} size={gridSize} days={days} />}
+          </RoomDays>
         ) : (
           <BusyInput
             room={room}
@@ -588,21 +626,9 @@ export default function RoomView({ code }: { code: string }) {
 
       {heatmap !== null && (
         <>
-          <section
-            className={`${GRID_CARD_WIDTH} rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800`}
-          >
-            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-sm font-medium">When everyone is free</h2>
-              <LiveBadge mode={liveMode} />
-            </div>
-            <Heatmap
-              room={room}
-              freeCounts={heatmap.freeCounts}
-              submittedCount={heatmap.submittedCount}
-              size={gridSize}
-            />
-          </section>
-
+          {/* The answer before the evidence. These few lines are what the whole
+              page exists to produce, and below the heatmap they sat a full
+              grid's height from anyone who had not already scrolled for them. */}
           <section
             className={`${COLUMN} rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800`}
           >
@@ -611,6 +637,24 @@ export default function RoomView({ code }: { code: string }) {
               room={room}
               slots={heatmap.bestSlots}
               submittedCount={heatmap.submittedCount}
+            />
+          </section>
+
+          <section
+            className={`${GRID_CARD_WIDTH} rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800`}
+          >
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              {/* Not "when everyone is free": most of what this grid shows is
+                  some of the people, and a heading promising everyone made the
+                  partial greens read as the answer. */}
+              <h2 className="text-sm font-medium">Who is free, and when</h2>
+              <LiveBadge mode={liveMode} />
+            </div>
+            <Heatmap
+              room={room}
+              freeCounts={heatmap.freeCounts}
+              submittedCount={heatmap.submittedCount}
+              size={gridSize}
             />
           </section>
         </>

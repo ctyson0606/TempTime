@@ -200,6 +200,52 @@ try {
     `${restored} of ${painted}`,
   )
 
+  // --- an edit after sending is not sent -----------------------------------
+  // The card used to stay on "Sent" through every later edit. Invert is the
+  // edit because it needs no coordinates, and the grid's position is read in
+  // page coordinates before and after: the card sits above the grid, so a
+  // state change that alters its height moves what is being edited.
+  const cardHeading = (name) => b.getByRole('heading', { name, exact: true })
+  const gridTop = () =>
+    painter.evaluate((n) => n.getBoundingClientRect().top + window.scrollY)
+  report(await cardHeading('Sent').isVisible(), 'after sending, the card says Sent')
+  const topBefore = await gridTop()
+
+  await b.getByRole('button', { name: 'Invert' }).click()
+  report(
+    await cardHeading('Changes not sent yet').isVisible(),
+    'an edit after sending turns the card back to not sent',
+  )
+  report(
+    (await b.getByRole('button', { name: 'Send changes' }).count()) === 1 &&
+      (await b.getByText('Last sent').count()) === 1,
+    'and it still says when the earlier answer went out',
+  )
+  const topAfter = await gridTop()
+  report(
+    topAfter === topBefore,
+    'and the card keeps its height, so the grid does not move',
+    `${topBefore} -> ${topAfter}`,
+  )
+
+  // Undoing the edit by hand is not a change: the comparison is with what was
+  // sent, not a flag set by the first edit and never cleared.
+  await b.getByRole('button', { name: 'Invert' }).click()
+  report(
+    await cardHeading('Sent').isVisible(),
+    'putting the grid back to what was sent reads as Sent again',
+  )
+
+  // The unsent edit is a local draft, and it has to survive a reload as
+  // unsent rather than being mistaken for what the server holds.
+  await b.getByRole('button', { name: 'Invert' }).click()
+  await b.reload()
+  await b.waitForSelector('text=Changes not sent yet', { timeout: 15000 })
+  report(true, 'an unsent edit is still called unsent after a reload')
+  await b.getByRole('button', { name: 'Send changes' }).click()
+  await cardHeading('Sent').waitFor({ timeout: 15000 })
+  report(true, 'sending the changes makes the card Sent again')
+
   await b.getByRole('button', { name: 'Withdraw' }).click()
   await b.waitForSelector('text=Not sent yet', { timeout: 15000 })
   report(true, 'withdrawing puts the room back to not-sent')
