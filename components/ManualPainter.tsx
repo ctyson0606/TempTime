@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { DateTime } from 'luxon'
 import { type RoomGrid, emptyMask, fullMask, invertMask, totalSlots } from '@/lib/slots'
 import { isMarked, markedCount, maskToBlocks } from '@/lib/providers/manual'
@@ -58,6 +58,21 @@ export default function ManualPainter({
     pending !== null && isMarked(pending, slot) ? PENDING_REMOVAL : FREE
 
   const marked = markedCount(mask)
+  const total = totalSlots(room)
+
+  /**
+   * The last swap, kept with the grid it produced. Its message shows only while
+   * the grid is still exactly that, so any later edit retires it without an
+   * effect or a timer: a swap is the moment someone asks "which way round is
+   * this now?", and the answer belongs where they are looking — beside the
+   * button — rather than in the key above the grid.
+   */
+  const [swapped, setSwapped] = useState<{ from: number; mask: string } | null>(null)
+  const swap = () => {
+    const next = invertMask(mask)
+    setSwapped({ from: marked, mask: next })
+    onChange(next)
+  }
   // On a paged room these reach every day, not only the page in view, so they
   // say how many. A button that looks the same whether it clears one week or
   // thirteen is the one someone presses expecting the smaller.
@@ -74,15 +89,29 @@ export default function ManualPainter({
                 painted or swapped to get there — but nothing on screen said
                 so, and after a swap it was fair to wonder which way round the
                 grid now was. Only beside a grid, like the results' readout. */}
+            {/* An instruction first and a key second, at reading size: the
+                first version was a 12px grey legend, which reads as a footnote
+                and was skipped. The "Not free" swatch carries a ring because
+                the empty cell's colour is close to the card behind it, and a
+                swatch that vanishes explains nothing. */}
             <div
               data-painter-key
-              className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500"
+              className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm"
             >
-              <KeyItem className={FREE}>Free</KeyItem>
-              <KeyItem className={EMPTY_CELL}>Not free</KeyItem>
-              {pending !== null && (
-                <KeyItem className={PENDING_REMOVAL}>Will be taken out</KeyItem>
-              )}
+              <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                Mark the times you are free
+              </span>
+              <span className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-zinc-600 dark:text-zinc-400">
+                <KeyItem className={FREE}>Free</KeyItem>
+                <KeyItem
+                  className={`${EMPTY_CELL} ring-1 ring-zinc-300 ring-inset dark:ring-zinc-600`}
+                >
+                  Not free
+                </KeyItem>
+                {pending !== null && (
+                  <KeyItem className={PENDING_REMOVAL}>Will be taken out</KeyItem>
+                )}
+              </span>
             </div>
             <GridPainter
               room={room}
@@ -98,10 +127,19 @@ export default function ManualPainter({
       </RoomDays>
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-        <p className="text-xs text-zinc-500">
-          {marked === 0
-            ? 'Drag across the grid to mark when you are free — or mark when you are busy, then swap.'
-            : `${marked} of ${totalSlots(room)} slots marked free — ${duration(marked * room.slotMinutes)}. Drag over them again to clear.`}
+        <p data-painter-status className="text-xs text-zinc-500">
+          {swapped !== null && swapped.mask === mask ? (
+            <>
+              <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                Swapped: {marked} of {total} slots are now free
+              </span>{' '}
+              (was {swapped.from}). Coloured still means free.
+            </>
+          ) : marked === 0 ? (
+            'Drag across the grid to mark when you are free — or mark when you are busy, then swap.'
+          ) : (
+            `${marked} of ${total} slots marked free — ${duration(marked * room.slotMinutes)}. Drag over them again to clear.`
+          )}
         </p>
         {/* Three one-shot actions rather than a busy/free mode. A mode would
             give every label, colour and count in this flow a second version to
@@ -113,13 +151,11 @@ export default function ManualPainter({
         <div className="flex flex-wrap gap-2">
           <PainterAction
             onClick={() => onChange(fullMask(room))}
-            disabled={marked === totalSlots(room)}
+            disabled={marked === total}
           >
             Select all{reach}
           </PainterAction>
-          <PainterAction onClick={() => onChange(invertMask(mask))}>
-            Swap free ↔ not free
-          </PainterAction>
+          <PainterAction onClick={swap}>Swap free ↔ not free</PainterAction>
           <PainterAction
             onClick={() => onChange(emptyMask(room))}
             disabled={marked === 0}
@@ -152,7 +188,7 @@ function KeyItem({
 }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span aria-hidden className={`h-3.5 w-5 rounded-sm ${className}`} />
+      <span aria-hidden className={`h-4 w-6 rounded ${className}`} />
       {children}
     </span>
   )

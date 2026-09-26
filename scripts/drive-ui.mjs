@@ -240,6 +240,17 @@ try {
   await b.getByRole('button', { name: 'Swap free ↔ not free' }).click()
   const inverted = await freeCells()
   report(await keyMatches(0, 4), 'after a swap the key still reads coloured as free')
+  // The answer to "which way round is it now?" is given beside the button, in
+  // numbers someone can check against what they painted.
+  const status = () => b.locator('[data-painter-status]').textContent()
+  const swapSaid = await status()
+  report(
+    swapSaid.includes(
+      `Swapped: ${gridCells - painted} of ${gridCells} slots are now free`,
+    ) && swapSaid.includes(`(was ${painted})`),
+    'a swap says how many slots are free now and before',
+    swapSaid.trim(),
+  )
   report(
     inverted === gridCells - painted,
     'swapping flips every slot rather than some of them',
@@ -250,6 +261,27 @@ try {
     (await freeCells()) === painted,
     'and swapping twice puts the selection back',
     `${painted} cells`,
+  )
+  const backSaid = await status()
+  report(
+    backSaid.includes(`Swapped: ${painted} of ${gridCells} slots are now free`) &&
+      backSaid.includes(`(was ${gridCells - painted})`),
+    'and the second swap reports its own numbers',
+    backSaid.trim(),
+  )
+  // Any other edit retires the message: it describes the swap, and once the
+  // grid has moved on it would be describing a grid that no longer exists.
+  await painter.locator('[data-slot="20"]').click()
+  const afterEdit = await status()
+  await painter.locator('[data-slot="20"]').click()
+  report(
+    !afterEdit.includes('Swapped') && (await freeCells()) === painted,
+    'and painting afterwards replaces it with the plain count',
+    afterEdit.trim(),
+  )
+  report(
+    (await painterKey.textContent()).startsWith('Mark the times you are free'),
+    'the key above the grid opens with what to do',
   )
 
   report(
