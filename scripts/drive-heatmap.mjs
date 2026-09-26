@@ -185,7 +185,6 @@ try {
   )
 
   // --- Alice answers -------------------------------------------------------
-  await a.getByRole('button', { name: 'Paint by hand' }).click()
   await drag(a, painter, 0, 9)
   await a.getByRole('button', { name: 'Send my times' }).click()
   await a.waitForSelector('text=Send again', { timeout: 15000 })
@@ -203,7 +202,6 @@ try {
   // --- Bob answers, overlapping ------------------------------------------
   const b = await bob.newPage()
   await join(b, code, 'Bob')
-  await b.getByRole('button', { name: 'Paint by hand' }).click()
   await drag(b, b.getByRole('group', { name: 'Your free times' }), 5, 14)
   await b.getByRole('button', { name: 'Send my times' }).click()
   await b.waitForSelector('text=Send again', { timeout: 15000 })

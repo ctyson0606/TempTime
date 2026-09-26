@@ -82,14 +82,16 @@ export default function ManualPainter({
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
         <p className="text-xs text-zinc-500">
           {marked === 0
-            ? 'Drag across the grid to mark when you are free.'
+            ? 'Drag across the grid to mark when you are free — or mark when you are busy, then swap.'
             : `${marked} of ${totalSlots(room)} slots marked free — ${duration(marked * room.slotMinutes)}. Drag over them again to clear.`}
         </p>
         {/* Three one-shot actions rather than a busy/free mode. A mode would
             give every label, colour and count in this flow a second version to
             keep in step, and the two versions would drift somewhere no test can
-            see. "Invert" covers the person who would rather think in busy time:
-            paint what is taken, then flip once. See PLAN.md section 14. */}
+            see. The swap covers the person who would rather think in busy time:
+            paint what is taken, then flip once. See PLAN.md section 14. It was
+            labelled "Invert", which said what it does to a bit string and not
+            what it does to the grid; the label now names both ends. */}
         <div className="flex flex-wrap gap-2">
           <PainterAction
             onClick={() => onChange(fullMask(room))}
@@ -98,7 +100,7 @@ export default function ManualPainter({
             Select all{reach}
           </PainterAction>
           <PainterAction onClick={() => onChange(invertMask(mask))}>
-            Invert
+            Swap free ↔ not free
           </PainterAction>
           <PainterAction
             onClick={() => onChange(emptyMask(room))}

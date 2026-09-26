@@ -159,7 +159,6 @@ try {
   )
 
   // --- painting on a page lands in the room's mask --------------------------
-  await a.getByRole('button', { name: 'Paint by hand' }).click()
   const p0 = PICKED * PER_DAY
   await drag(a, painter, p0, p0 + 3)
   report(

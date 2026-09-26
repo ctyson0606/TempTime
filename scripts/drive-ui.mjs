@@ -155,7 +155,20 @@ try {
   )
 
   // --- painting, sending, and getting it back ------------------------------
-  await b.getByRole('button', { name: 'Paint by hand' }).click()
+  // Painting needs no choosing: the grid is live as soon as Bob is in. The row
+  // above it offers only what works — the platforms still to come are hidden
+  // rather than listed as dead buttons, and painting is not a source to pick.
+  const sourceLabels = await b
+    .getByRole('group', { name: 'Sources' })
+    .getByRole('button')
+    .evaluateAll((nodes) => nodes.map((n) => n.textContent.trim()))
+  report(
+    sourceLabels.join() === 'Weekly timetable,Import .ics' &&
+      (await b.getByText('Coming soon').count()) === 0 &&
+      (await b.getByRole('button', { name: 'Paint by hand' }).count()) === 0,
+    'the source row offers only the two that work',
+    sourceLabels.join(' | '),
+  )
   // Scoped to the painter: the page draws a second grid for the heatmap, and
   // both fill their cells with data-slot. An unscoped [data-slot="4"] matches
   // two elements and Playwright refuses to guess which.
@@ -199,20 +212,20 @@ try {
   const painted = await freeCells()
   report(painted > 0, 'dragging marks slots on the grid', `${painted} cells`)
 
-  // Invert is what replaces a busy/free mode, so it has to be arithmetic rather
+  // The swap is what replaces a busy/free mode, so it has to be arithmetic rather
   // than "something changed": every slot flips, and twice is a no-op.
   const gridCells = await painter.locator('[data-slot]').count()
-  await b.getByRole('button', { name: 'Invert' }).click()
+  await b.getByRole('button', { name: 'Swap free ↔ not free' }).click()
   const inverted = await freeCells()
   report(
     inverted === gridCells - painted,
-    'invert flips every slot rather than some of them',
+    'swapping flips every slot rather than some of them',
     `${inverted} = ${gridCells} - ${painted}`,
   )
-  await b.getByRole('button', { name: 'Invert' }).click()
+  await b.getByRole('button', { name: 'Swap free ↔ not free' }).click()
   report(
     (await freeCells()) === painted,
-    'and inverting twice puts the selection back',
+    'and swapping twice puts the selection back',
     `${painted} cells`,
   )
 
@@ -249,7 +262,7 @@ try {
   )
 
   // --- an edit after sending is not sent -----------------------------------
-  // The card used to stay on "Sent" through every later edit. Invert is the
+  // The card used to stay on "Sent" through every later edit. The swap is the
   // edit because it needs no coordinates, and the grid's position is read in
   // page coordinates before and after: the card sits above the grid, so a
   // state change that alters its height moves what is being edited.
@@ -259,7 +272,7 @@ try {
   report(await cardHeading('Sent').isVisible(), 'after sending, the card says Sent')
   const topBefore = await gridTop()
 
-  await b.getByRole('button', { name: 'Invert' }).click()
+  await b.getByRole('button', { name: 'Swap free ↔ not free' }).click()
   report(
     await cardHeading('Changes not sent yet').isVisible(),
     'an edit after sending turns the card back to not sent',
@@ -278,7 +291,7 @@ try {
 
   // Undoing the edit by hand is not a change: the comparison is with what was
   // sent, not a flag set by the first edit and never cleared.
-  await b.getByRole('button', { name: 'Invert' }).click()
+  await b.getByRole('button', { name: 'Swap free ↔ not free' }).click()
   report(
     await cardHeading('Sent').isVisible(),
     'putting the grid back to what was sent reads as Sent again',
@@ -286,7 +299,7 @@ try {
 
   // The unsent edit is a local draft, and it has to survive a reload as
   // unsent rather than being mistaken for what the server holds.
-  await b.getByRole('button', { name: 'Invert' }).click()
+  await b.getByRole('button', { name: 'Swap free ↔ not free' }).click()
   await b.reload()
   await b.waitForSelector('text=Changes not sent yet', { timeout: 15000 })
   report(true, 'an unsent edit is still called unsent after a reload')

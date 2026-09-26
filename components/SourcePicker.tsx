@@ -17,15 +17,19 @@ interface Source {
 }
 
 /**
- * Where busy times come from.
+ * Where the time taken out of an offer comes from.
  *
- * The unavailable platforms are listed rather than hidden: knowing the connector
- * is coming is the reason someone would put up with importing a file today. Each
- * one becomes available by adding a provider under `lib/providers/`, with no
- * change here beyond a flag.
+ * Only what works is shown. The platforms still to come used to be listed as
+ * "Coming soon", on the theory that knowing a connector was on its way made
+ * importing a file today bearable; in use they were half the row and did
+ * nothing, and the user asked for them gone until they work. They stay in this
+ * list, so each one reappears by adding a provider under `lib/providers/` and
+ * flipping its flag.
+ *
+ * Painting by hand is not a source here either. The grid can always be painted,
+ * so a button to choose it did nothing but print a hint.
  */
 const SOURCES: Source[] = [
-  { id: 'manual', label: 'Paint by hand', note: 'Drag on the grid', available: true },
   {
     id: 'weekly',
     label: 'Weekly timetable',
@@ -40,29 +44,28 @@ const SOURCES: Source[] = [
 
 export default function SourcePicker({ onPick, active, busy }: SourcePickerProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {SOURCES.map((source) => (
+    <div
+      role="group"
+      aria-label="Sources"
+      className="flex flex-wrap items-center gap-2"
+    >
+      {SOURCES.filter((source) => source.available).map((source) => (
         <button
           key={source.id}
           type="button"
           onClick={() => onPick(source.id)}
-          disabled={!source.available || busy}
+          disabled={busy}
           title={source.note}
           className={[
             // See GridSizePicker in RoomView: thumb-sized on a phone, unchanged
             // from `sm` up.
             'inline-flex min-h-9 items-center rounded-xl px-3 py-1.5 text-xs font-medium transition-colors sm:min-h-0',
-            !source.available
-              ? 'cursor-not-allowed bg-zinc-50 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-600'
-              : active === source.id
-                ? 'bg-indigo-600 text-white'
-                : 'bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700',
+            active === source.id
+              ? 'bg-indigo-600 text-white'
+              : 'bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700',
           ].join(' ')}
         >
           {source.label}
-          {!source.available && (
-            <span className="ml-1.5 font-normal">· {source.note}</span>
-          )}
         </button>
       ))}
     </div>

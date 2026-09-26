@@ -59,7 +59,6 @@ export default function BusyInput({
   )
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [hint, setHint] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
   // The weekly pattern outlives this room, so it is read from the device rather
@@ -107,12 +106,9 @@ export default function BusyInput({
       return
     }
     if (source === 'weekly') {
-      setHint(null)
       setNotice(null)
       setWeeklyOpen(true)
-      return
     }
-    setHint('Drag across the grid below to mark when you are free.')
   }
 
   /** Edits to the pattern are saved as they happen: that is what "kept" means. */
@@ -132,7 +128,6 @@ export default function BusyInput({
 
   const read = async (file: File) => {
     setError(null)
-    setHint(null)
 
     let text: string
     try {
@@ -235,10 +230,6 @@ export default function BusyInput({
         <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">
           {error}
         </p>
-      )}
-
-      {hint !== null && imported === null && (
-        <p className="text-xs text-zinc-500">{hint}</p>
       )}
 
       {imported === null

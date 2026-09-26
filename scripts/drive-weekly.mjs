@@ -124,7 +124,6 @@ try {
   await join(page, first.code, 'Student')
 
   const painter = page.getByRole('group', { name: 'Your free times' })
-  await page.getByRole('button', { name: 'Paint by hand' }).click()
 
   // Everything free first, so what the pattern removes is unambiguous: any drop
   // in the count below is the pattern and nothing else.
