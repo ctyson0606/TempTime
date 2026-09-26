@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
-import { useBrowserValue } from '@/lib/browser'
+import { useBrowserValue, useMediaQuery } from '@/lib/browser'
 import { formatMinuteOfDay } from '@/lib/room'
 import {
   type Heatmap as HeatmapData,
@@ -144,7 +144,14 @@ export default function RoomView({ code }: { code: string }) {
   const origin = useBrowserValue(() => window.location.origin)
   const [status, setStatus] = useState<Status>({ kind: 'loading' })
   const [showQr, setShowQr] = useState(false)
-  const [gridSize, setGridSize] = useState<GridSize>('medium')
+  // Null until someone picks a size; until then the screen decides. Below the
+  // `sm` breakpoint that is small, the one size whose seven days fit a phone
+  // without the sideways scroll a finger on the grid cannot perform. The page
+  // shows a skeleton until the room loads, which is after hydration, so the
+  // server's wide guess is never drawn.
+  const [chosenSize, setGridSize] = useState<GridSize | null>(null)
+  const narrow = useMediaQuery('(max-width: 639px)')
+  const gridSize = chosenSize ?? (narrow ? 'small' : 'medium')
   const [joinError, setJoinError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
   const [submittedAt, setSubmittedAt] = useState<string | null>(null)

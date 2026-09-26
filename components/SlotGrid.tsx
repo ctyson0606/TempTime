@@ -55,40 +55,47 @@ const SIZES: Record<
     weekday: string
     label: string
     labelEveryMin: number | null
+    /** Columns may narrow to fit the screen instead of overflowing it. */
+    fluid: boolean
   }
 > = {
   small: {
-    gutter: 'w-9',
+    // 32px still fits "08:00" at this size, and the 4px it saves is what lets
+    // seven days and two gaps fit a 320px screen.
+    gutter: 'w-8',
     column: 'w-9',
-    divider: 'w-4',
+    divider: 'w-4 mx-0.5',
     row: 'h-3',
     header: 'h-9',
     date: 'text-[10px]',
     weekday: 'text-[9px]',
     label: 'text-[9px]',
     labelEveryMin: 120,
+    fluid: true,
   },
   medium: {
     gutter: 'w-14',
     column: 'w-16',
-    divider: 'w-8',
+    divider: 'w-8 mx-1',
     row: 'h-5',
     header: 'h-11',
     date: 'text-xs',
     weekday: 'text-[10px]',
     label: 'text-[10px]',
     labelEveryMin: 60,
+    fluid: false,
   },
   large: {
     gutter: 'w-16',
     column: 'w-28',
-    divider: 'w-10',
+    divider: 'w-10 mx-1',
     row: 'h-8',
     header: 'h-12',
     date: 'text-sm',
     weekday: 'text-xs',
     label: 'text-xs',
     labelEveryMin: null,
+    fluid: false,
   },
 }
 
@@ -195,7 +202,20 @@ export default function SlotGrid({
       role={label === undefined ? undefined : 'group'}
       aria-label={label}
     >
-      <div className="mx-auto flex w-fit min-w-max">
+      {/* Small is the size a phone opens on, and there it has to fit: a finger
+          on the cells paints rather than scrolls, so sideways scrolling is left
+          to the thin date header and gutter, which nobody finds. Its columns
+          therefore start at their full width and give way, down to 24px, before
+          anything overflows — seven days and two gaps fit a 320px screen. The
+          larger sizes are chosen for legibility and keep their widths, handing
+          any overflow to this scroller. */}
+      <div
+        className={
+          style.fluid
+            ? 'mx-auto flex w-full justify-center'
+            : 'mx-auto flex w-fit min-w-max'
+        }
+      >
         <div className={`${style.gutter} shrink-0`}>
           <div className={style.header} />
           {rows.map((minute) => (
@@ -209,11 +229,20 @@ export default function SlotGrid({
         </div>
 
         {columns.map(({ date, day, dayIndex, skipped }) => (
-          <div key={date} className="flex">
+          /* On a fluid grid the day, not only its column, has to be allowed to
+             shrink: a flex item's own width also counts as its smallest size,
+             so a column that could narrow sat inside a day that could not, and
+             measured 34px on every phone. The floor is set here instead —
+             24px of column, plus the gap drawn before it — which keeps the
+             scroller as the fallback rather than letting days overlap. */
+          <div
+            key={date}
+            className={
+              !style.fluid ? 'flex' : skipped > 0 ? 'flex min-w-11' : 'flex min-w-6'
+            }
+          >
             {skipped > 0 && (
-              <div
-                className={`${style.divider} mx-1 flex shrink-0 flex-col items-center`}
-              >
+              <div className={`${style.divider} flex shrink-0 flex-col items-center`}>
                 <div
                   className={`${style.header} ${style.weekday} flex items-end pb-1 text-zinc-400`}
                 >
@@ -222,7 +251,7 @@ export default function SlotGrid({
                 <div className="flex-1 border-l border-dashed border-zinc-300 dark:border-zinc-700" />
               </div>
             )}
-            <div className={`${style.column} shrink-0`}>
+            <div className={`${style.column} ${style.fluid ? 'min-w-6' : 'shrink-0'}`}>
               <div className={`${style.header} text-center`}>
                 {weekdayOnly ? (
                   <div className={`${style.date} font-medium`}>

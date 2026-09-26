@@ -235,20 +235,54 @@ try {
     small.map((t) => `${t.text}:${t.h}`).join(', '),
   )
 
-  // --- the grid's own scroller ---------------------------------------------
+  // --- the grid fits a phone ------------------------------------------------
+  // A finger on the cells paints rather than scrolls, so a grid wider than the
+  // screen can only be scrolled from its thin date header and time gutter —
+  // which works, and which nobody finds. A phone therefore opens on the small
+  // size, whose columns give way until seven days fit.
   const painter = page.getByRole('group', { name: 'Your free times' })
-  const scroller = await painter.evaluate((el) => ({
-    scrollWidth: el.scrollWidth,
-    clientWidth: el.clientWidth,
-  }))
+  const sizePicker = page.getByRole('group', { name: 'Grid size' })
+  const pressed = (
+    await sizePicker.locator('[aria-pressed="true"]').textContent()
+  )?.trim()
+  report(pressed === 'small', 'a phone opens on the small grid', `${pressed}`)
+  const measure = () =>
+    painter.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }))
+  const fitted = await measure()
   report(
-    scroller.scrollWidth > scroller.clientWidth,
-    'a seven-day grid overflows its own scroller rather than the page',
-    `${scroller.scrollWidth} in ${scroller.clientWidth}`,
+    fitted.scrollWidth <= fitted.clientWidth + 1,
+    'and seven days fit without scrolling sideways',
+    `${fitted.scrollWidth} in ${fitted.clientWidth}`,
   )
 
-  // The last day has to be reachable. A scroller that cannot actually be
-  // scrolled to its end hides a whole column with no indication it exists.
+  // 390px proves nothing about the columns giving way: seven fixed 36px days
+  // fit it anyway, and a sabotage that froze them passed this whole script. At
+  // 320px they do not (284px of grid for 246px of room), so only a grid that
+  // narrows its columns passes here.
+  await page.setViewportSize({ width: 320, height: phone.viewport.height })
+  await page.waitForTimeout(200)
+  const narrowest = await measure()
+  report(
+    narrowest.scrollWidth <= narrowest.clientWidth + 1,
+    'and still fit on a 320px screen, by narrowing the columns',
+    `${narrowest.scrollWidth} in ${narrowest.clientWidth}`,
+  )
+  await page.setViewportSize(phone.viewport)
+  await page.waitForTimeout(200)
+
+  // The larger sizes keep their widths and overflow into the grid's own
+  // scroller instead. The last day has to be reachable there: a scroller that
+  // cannot actually be scrolled to its end hides a column with no indication.
+  await sizePicker.getByRole('button', { name: 'medium' }).click()
+  const scroller = await measure()
+  report(
+    scroller.scrollWidth > scroller.clientWidth,
+    'a chosen larger size overflows its own scroller rather than the page',
+    `${scroller.scrollWidth} in ${scroller.clientWidth}`,
+  )
   await painter.evaluate((el) => {
     el.scrollLeft = el.scrollWidth
   })
@@ -259,6 +293,9 @@ try {
   await painter.evaluate((el) => {
     el.scrollLeft = 0
   })
+  // Back to the size a phone actually opens on, so everything below is
+  // measured where a real finger would be.
+  await sizePicker.getByRole('button', { name: 'small' }).click()
 
   // --- painting with a finger ----------------------------------------------
   // Scrolled to first, because `boundingBox()` answers in the viewport and not
