@@ -99,6 +99,16 @@ whose blast radius is the assertion you are testing, move it somewhere with
 fewer neighbours if it is not, and treat "the run died first" as a result that
 has not answered the question.
 
+**Aim the scenario as well as the sabotage.** A grid meant to narrow its
+columns on a phone was checked at 390px, and a sabotage that froze the columns
+passed the whole script: seven fixed-width days fit 390px anyway, so the
+assertion was satisfied on a screen where the feature has nothing to do. At
+320px the frozen grid overflows, and there the same sabotage failed at once —
+284px of grid in 246px. Before trusting an assertion, name the configuration in
+which the code under test is *necessary* — the narrowest screen, the room with
+gaps, the empty input — and assert there. A check that only runs where the
+feature is redundant cannot tell whether the feature exists.
+
 **Widening a window proves nothing if the observer is blocked until it closes.**
 Chasing a response whose two halves disagreed, the suspected window sat between
 two writes inside one request, so a delay was dropped between them — and the
@@ -124,6 +134,16 @@ and is not. The limiter counts in memory, so restarting the dev server clears it
 whatever the mechanism, check that the harness is not the thing that failed
 before reading anything into a control.
 
+**A probe run through somebody else's server spends their budget.** The
+room-creation limit counts in the server's memory, so probing through the
+user's own `npm run dev` uses up the rooms they are testing with, and restarting
+their process to clear it is not ours to do. Next refuses a second `next dev` in
+the same directory, but a production build served with `next start -p 3001`
+runs beside it with a limiter of its own — and it is the better target anyway,
+because it carries the production CSP. A probe that aborts can also leave its
+rooms behind in the live database: check for them by title afterwards rather
+than assuming the run cleaned up.
+
 **A probe whose outcomes cannot differ proves nothing.** Confirming a credential
 by watching a request fail says only that something failed. Two rounds were lost
 this way: a JWT secret was tested against an endpoint that rejects every
@@ -132,6 +152,14 @@ wrong one both returned an identical 401 and the value looked broken when it was
 merely untested. Pick a target where success and failure look different, and run
 the known-bad control in the same breath as the real one — if they match, the
 test has not started yet.
+
+Confirming that a deploy has landed is the same problem. A 200 from the site is
+what the old build returns too. Pick something only the new build does — a
+request the old one refuses (an eight-day room: 400 before, 201 after), or a
+string only the new bundle contains — run it against production *before*
+pushing and watch it fail, then poll for the change. Here that took 30–45
+seconds from push, and only after that point does driving the site say anything
+about the new code.
 
 The corollary is that a credential is not verified by where it was copied from.
 A dashboard shows a key's ID next to its value, and the ID sailed through our own
@@ -599,6 +627,27 @@ Update semantics:
   two things about the same fact, derive them from one read, or accept that
   every window between the writes is a response someone will see. A transaction
   around the writes narrows the window; one source removes it.
+- **A view of part of a collection keeps the whole collection's indices.** A
+  long room draws seven of up to ninety-one days at a time, and every cell still
+  carries its room-wide slot index, so the mask, the counts and the server never
+  learn that paging exists. Renumbering per page is the natural mistake and the
+  invisible one: the grid still paints and still looks right, and the answer it
+  sends is about the wrong days. The index is the contract with everything
+  downstream; a view chooses which part to draw, never what the parts are
+  called.
+- **A status that reports on a copy kept elsewhere compares against that
+  copy.** The send card said "Sent" after the first send and kept saying it
+  through every later edit, because sent-ness was a timestamp set once rather
+  than a comparison. Holding what was last sent and comparing the grid with it
+  makes the state move both ways: an edit turns it back to unsent, undoing the
+  edit turns it back to sent, and a reload reads correctly because the
+  comparison is rebuilt from the server's copy. A flag set on the first change
+  and cleared on send cannot do the middle one.
+- **A key is computed by the code that colours, never restated.** The heatmap's
+  legend labels each step with the people it stands for, and past four
+  submitters a step is a range. Those ranges are derived by running the same
+  function that places a cell on a step, so the legend cannot describe a scale
+  the grid is not drawn with.
 - **Anything kept across contexts is stored in the vocabulary that outlives
   them.** The weekly pattern is held as weekday plus minutes-from-midnight, not
   as the 0/1 mask the grid paints, because a mask is shaped by one room's day
@@ -727,6 +776,20 @@ Update semantics:
   carried. Expansion has to start at DTSTART and walk. Cap the walk, and *report*
   hitting the cap — an event that silently fails to appear is the worst outcome
   available.
+- **Bounding an array in a CHECK with `array_length`.** `array_length('{}', 1)`
+  is NULL, and a CHECK that evaluates to NULL passes, so `between 1 and 7` never
+  enforced its lower bound: an empty `dates` inserted straight into the table was
+  accepted, and only the Route Handler stood in the way. `cardinality()` returns
+  0 and fails as intended. It was found by inserting 0, 1, 91 and 92 days
+  directly with the secret key — the only way to test a backstop, since the API
+  never lets the case reach it. Any CHECK whose expression can be NULL deserves
+  that test.
+- **Expecting a fixed-width flex item to shrink.** A flex item's own `width`
+  also counts as its smallest size, so a `w-9` column inside a day that could not
+  shrink measured 34px on every phone. Moving the width to `flex-basis` swung the
+  other way: the parent sized itself from the content, and every column
+  collapsed to 23px even where 36px fitted. What works is a fixed width on the
+  column, a shrinkable parent, and the floor stated explicitly on the parent.
 - **Using `??` for a default the caller can legitimately return empty.** It only
   fires on null and undefined, so a callback returning `''` keeps the empty
   string and the fallback never runs. Found when refactoring the grid: cells lost
@@ -779,6 +842,12 @@ Update semantics:
   change's fault. A default parameter falling back to `new Date()` is what hides
   the omission: if a suite freezes time, every call in it takes the frozen
   value, and the ones that look like they do not need it are the ones to check.
+  The same shape arrived in a browser probe: `drive-mobile.mjs` clicked the
+  first seven selectable days of the current month, and on the 26th only five
+  existed — a timeout that came and went with the calendar, confirmed as
+  pre-existing only by stashing the change in flight and running the untouched
+  tree. A probe that picks dates relative to today has to pick them where the
+  count is guaranteed; it now starts from next month.
 - **PowerShell here-strings (`@'...'@`) in the Bash tool.** Bash does not parse
   them; the `@` characters end up inside the string. This silently corrupted a
   commit message. Two shells are available in this environment and each needs its

@@ -1,8 +1,8 @@
 # STATE
 
-> Last updated: 2026-08-25 (both halves of the legibility complaint are built:
-> the send card moved above the grid, and the heatmap's colour scale is measured
-> rather than eyeballed)
+> Last updated: 2026-09-26 (rooms can cover the whole 91-day window, drawn as a
+> calendar that zooms into seven-day pages; the results say what each date holds;
+> the send card notices unsent edits; a phone opens on a grid that fits it)
 
 Current working state of the project. Superseded content is deleted, not
 archived — git holds the history. For durable rules and workflow, see
@@ -42,20 +42,23 @@ confused again (see Recent Decisions). Chasing it surfaced a real defect in
 `GET /heatmap` — two halves of "who has answered" read from two tables, and a
 window in which they disagreed — which is also fixed and proven both ways.
 
-The weekly timetable, built on 2026-08-11, was the last feature: a week
+The weekly timetable, built on 2026-08-11, is the most recent new input: a week
 painted once, kept on the device, and subtracted from the free time in whichever
 room is open. It is the answer to the thing an `.ics` structurally cannot say,
 and it came out of a real file that could not be imported at all.
 
-**The newest work is legibility, raised by the user on 2026-08-24 as two
-complaints, and both are built.** Whether an answer has been sent, and when, was
-a card below a full-height grid and is now the first thing under the room's
-header, in amber or green with a coloured dot. And the heatmap's greens, which
-were too close together to read how many people share a slot, are now a measured
-ramp of four steps, with a room using only as many of them as it has people. The
-long-standing Open Question about the scale with few submitters is answered by
-the same change. Nothing else is open; the next body of work is the second-stage
-connectors.
+**The newest work, on 2026-09-26, came from the user using the app and saying
+what did not work, one complaint at a time, and all of it is built and verified
+against the deployment.** A room may now cover any of the 91 days the picker
+offers rather than seven. A room longer than a week opens on a calendar of its
+dates, and picking one zooms into seven days starting there. The results
+calendar colours each date by the most people free at once that day, and the
+results card leads with the best times, labels its key in people, and ticks
+whatever suits everyone. The send card turns amber again when the grid is
+edited after sending. And a phone opens on the small grid, whose columns narrow
+until seven days fit, so nobody has to scroll sideways across a grid where a
+finger paints. The follow-ups named but not started are in Next Steps; beyond
+them the next body of work is still the second-stage connectors.
 
 ---
 
@@ -69,30 +72,54 @@ connectors.
   pair (§13).
 - Pure logic: `lib/dates.ts`, `lib/roomCode.ts`, `lib/slots.ts`,
   `lib/aggregate.ts`, `lib/ownerSecret.ts`, `lib/jwt.ts`, `lib/calendar.ts`,
-  `lib/providers/manual.ts`, `lib/providers/ics.ts`, `lib/importCache.ts`.
+  `lib/providers/manual.ts`, `lib/providers/ics.ts`, `lib/importCache.ts`,
+  `lib/heatScale.ts`, `lib/dayPages.ts`.
 - UI: create-room page with a month `DatePicker`, room page with a three-size
   grid, QR and admin links, join-by-name, owner-only delete, `ManualPainter`,
   `SourcePicker`, `PrivacyChecklist`, and send / send-again / withdraw — all
   talking to the real API through `lib/roomClient.ts`.
+- Rooms of up to 91 days (`MAX_ROOM_DAYS = SELECTION_WINDOW_DAYS + 1`). Past
+  seven days, each grid is wrapped in `RoomDays`: a calendar of the room's dates
+  that zooms into a page of seven starting at the date tapped, with Earlier,
+  Later and All dates. `lib/dayPages.ts` holds the paging arithmetic; `SlotGrid`
+  takes a `days` range and keeps room-wide slot indices on every page. The
+  painter and the results each keep their own page. Rooms of seven days or
+  fewer render exactly as before.
+- The grid opens on small below 640px (`useMediaQuery` in `lib/browser.ts`) and
+  on medium above; a size someone picks wins. Small is fluid: columns narrow to
+  a 24px floor before anything overflows, so seven days — with gaps — fit a
+  320px screen. Medium and large keep their widths and their scroller.
 - The send card sits above the grid rather than below it, and says its state
   in colour: an amber card with an amber dot for `Not sent yet`, green for
-  `Sent`, with the timestamp on its own line at its own weight. Its text block
-  reserves the height of its tallest state, because a card above the grid that
-  changes height moves the grid.
+  `Sent`, with the timestamp on its own line at its own weight. An edit after
+  sending turns it amber again as `Changes not sent yet`, keeping the last-sent
+  time, with a `Send changes` button; it compares the grid with what was last
+  sent, so undoing the edit reads as Sent again. Its text block reserves the
+  height of its tallest state, because a card above the grid that changes height
+  moves the grid; the new state's line is sized to the one it replaces.
 - `lib/roomSession.ts` holds what stays in this browser: token, participant id,
   owner secret, display name, and the unsent draft mask.
 - Live Supabase project: schema, RLS, explicit grants and the hourly `pg_cron`
-  purge, all applied and verified against the running database.
+  purge, all applied and verified against the running database. The fourth
+  migration, `0004_room_days.sql`, was applied by the user in the SQL editor on
+  2026-09-26 and probed there by direct inserts: 1 and 91 days accepted, 0 and
+  92 refused.
 - Server plumbing: `lib/env.ts`, `lib/schemas.ts` (Zod), `lib/rateLimit.ts`,
   `lib/api.ts`, `lib/supabase/server.ts`.
 - Routes: `POST /api/rooms`, `GET` and `DELETE /api/rooms/:code`,
   `POST /api/rooms/:code/join`, `POST` and `DELETE /api/rooms/:code/submit`,
   `GET /api/rooms/:code/my-submission`, `GET /api/rooms/:code/heatmap`.
-- `fetchHeatmap` in `lib/roomClient.ts` and the results UI it feeds: `Heatmap`
-  (a measured four-step colour ramp, hover and tap readout, named empty state),
-  `BestSlots` and `MemberList`, all wired into `RoomView`. `lib/heatScale.ts`
-  decides how many of the ramp's steps a room of N people uses and which one a
-  slot lands on; the colours themselves stay in the component.
+- `fetchHeatmap` in `lib/roomClient.ts` and the results UI it feeds: `BestSlots`
+  first, then `Heatmap` under the heading "Who is free, and when" (a measured
+  four-step colour ramp, a key above the grid naming the people each step
+  stands for, a tick on slots that suit everyone once two have answered, a tap
+  and hover readout beside the grid, a named empty state), and `MemberList`,
+  all wired into `RoomView`. On a long room the results open on a calendar whose
+  dates are coloured by `dayPeaks` in `lib/aggregate.ts` — the most people free
+  at once that day — with a count under each date and a sentence saying how many
+  dates suit everyone. `lib/heatScale.ts` decides how many of the ramp's steps a
+  room of N people uses, which one a slot lands on, and (`stepRanges`) which
+  counts each step stands for; the colours themselves stay in the component.
 - `lib/realtime.ts`: subscribes to `participants` for the room and refetches
   `/heatmap` on any change, falling back to polling every four seconds if the
   channel does not reach `SUBSCRIBED` within five. The pushed payload is
@@ -118,8 +145,9 @@ connectors.
   HSTS in production, and `X-Powered-By` switched off. Development relaxes
   `script-src` and `connect-src` on purpose; production has neither
   `'unsafe-inline'` nor `'unsafe-eval'`.
-- The mobile pass: nothing scrolls the page sideways at 390px, the seven-day grid
-  overflows its own scroller and reaches its last day, a finger drag paints
+- The mobile pass: nothing scrolls the page sideways at 390px, a phone opens on
+  a small grid that fits seven days without scrolling sideways (medium still
+  overflows into its own scroller and reaches its last day), a finger drag paints
   without scrolling, and no control is a smaller tap target than the primary
   buttons. Two fixes came out of it — `min-h-9` below `sm` on the three controls
   that were 20–28px, and a tap path for the heatmap readout.
@@ -128,18 +156,20 @@ connectors.
   the pitch, so it also states the unflattering parts: IP addresses counted in
   memory, room titles and display names stored verbatim, and an aggregate of one
   submitter being that submitter's answer.
-- `README.md`: local setup, the Supabase project's two settings and three
-  migrations, a second-machine section that skips all of that, the seven
+- `README.md`: local setup, the Supabase project's two settings and four
+  migrations, a second-machine section that skips all of that, the
   verification scripts, and the deployment compromises. Translated in full as
   `README.zh-TW.md` and `README.zh-CN.md`, cross-linked from a language line at
-  the top of each. The three agree on 12 headings, 6 code blocks and 13 table
-  rows, and their 16 lines of commands were diffed rather than read.
-- Eight scripts that verify against the running system, all development-only
+  the top of each. Their commands were diffed rather than read, and their
+  structure compared by count; re-checked on 2026-09-26 after a migration row
+  and a script row were added to each, when all three had 12 headings, 12 fence
+  lines and 20 table lines.
+- Nine scripts that verify against the running system, all development-only
   because they write to the live database: `scripts/verify-rls.mjs` (the
   repeatable proof of `PLAN.md` §2.2), `scripts/drive-ui.mjs` (the M1
-  acceptance test in two browser contexts, 25 assertions, also covering the
-  four absence notices and the three one-shot painter actions),
-  `scripts/verify-heatmap.mjs`
+  acceptance test in two browser contexts, 32 assertions, also covering the
+  four absence notices, the three one-shot painter actions and the send card's
+  unsent-changes state), `scripts/verify-heatmap.mjs`
   (20 assertions over the overlay API, its privacy, its authorisation and the
   agreement between its member flags and its count),
   `scripts/drive-heatmap.mjs` (the M3 acceptance test, 28 assertions in two
@@ -147,26 +177,35 @@ connectors.
   overlay does not answer to the live one's accessible name),
   `scripts/verify-purge.mjs` (15 assertions over expiry, the credential and the
   cascade), `scripts/verify-headers.mjs` (22 assertions over the CSP and the
-  security headers), `scripts/drive-mobile.mjs` (15 assertions in a phone-sized
-  touch context; it waits for the heatmap's readout element before it taps,
-  because the overlay's own accessible name is also carried by its placeholder —
-  see Recent Decisions) and `scripts/drive-weekly.mjs` (12 assertions over the
-  weekly timetable, in a room of two Mondays and the Tuesday between them, and
-  across two rooms because outliving one is the whole point). The three that
-  drag across a grid — `drive-ui.mjs`, `drive-heatmap.mjs` and
-  `drive-mobile.mjs` — bring both ends of the drag on screen before measuring
-  either, and the first two throw rather than approximate when the two ends
-  cannot both fit. They need a server running — `APP_URL=` for the API probes,
-  `BASE_URL=` for the browser ones, and `verify-rls.mjs` needs neither because it
-  talks to Supabase directly. `verify-headers.mjs` is the one that needs a
-  **production** build rather than the dev server, since development relaxes the
-  policy; it refuses to run if it sees the development policy at all. All but
-  `verify-purge.mjs` and `verify-rls.mjs` create rooms against a limit of ten an
-  hour, so a handful of runs an hour is the ceiling for those.
-- 265 tests, with `format:check`, `lint` and `typecheck` clean. 236 of them were
-  re-run on 2026-08-08 after a clean reinstall, on both machines, with all three
-  checks green on Windows; the 29 added since cover the `.ics` import's
-  robustness, the weekly pattern and the heatmap's colour scale.
+  security headers), `scripts/drive-mobile.mjs` (18 assertions in a phone-sized
+  touch context: the phone opens on small and seven days fit at 390px and at
+  320px, medium overflows into a scroller that reaches its last day, and it
+  waits for the heatmap's readout element before it taps, because the overlay's
+  own accessible name is also carried by its placeholder — see Recent
+  Decisions), `scripts/drive-weekly.mjs` (12 assertions over the weekly
+  timetable, in a room of two Mondays and the Tuesday between them, and across
+  two rooms because outliving one is the whole point) and
+  `scripts/drive-pages.mjs` (27 assertions over a room longer than a week,
+  default 20 days via `DAYS=`: the calendar, zooming and paging, room-wide slot
+  numbers on every page, the results calendar's counts and colours, the key and
+  the tick; it reads the page size off the screen and needs migration `0004`).
+  The four that drag across a grid — `drive-ui.mjs`, `drive-heatmap.mjs`,
+  `drive-pages.mjs` and `drive-mobile.mjs` — bring both ends of the drag on
+  screen before measuring either, and all but the last throw rather than
+  approximate when the two ends cannot both fit. They need a server running —
+  `APP_URL=` for the API probes, `BASE_URL=` for the browser ones, and
+  `verify-rls.mjs` needs neither because it talks to Supabase directly.
+  `verify-headers.mjs` is the one that needs a **production** build rather than
+  the dev server, since development relaxes the policy; it refuses to run if it
+  sees the development policy at all. All but `verify-purge.mjs` and
+  `verify-rls.mjs` create rooms against a limit of ten an hour, so a handful of
+  runs an hour is the ceiling for those.
+- 285 tests, with `format:check`, `lint` and `typecheck` clean on 2026-09-26.
+  236 of them were re-run on 2026-08-08 after a clean reinstall, on both
+  machines, with all three checks green on Windows; the 49 added since cover the
+  `.ics` import's robustness, the weekly pattern, the heatmap's colour scale and
+  its step ranges, paging, room calendars and per-day peaks. Nothing has been
+  run on the Windows machine since 2026-08-09.
 - **A weekly timetable**, the one input that outlives the room it was painted in.
   `lib/weekly.ts` converts between a painted week and a room's own grid;
   `lib/weeklyStore.ts` keeps it in `localStorage`. `WeeklyPainter` is the panel,
@@ -207,7 +246,11 @@ connectors.
   so passing them is the proof that the nonce CSP works behind a CDN. The purge
   route answered 401 with no credential, 401 with a wrong one, and
   `200 {"ok":true,"deleted":0}` with the real one over `GET` + bearer, which is
-  exactly how Vercel Cron calls it.
+  exactly how Vercel Cron calls it. On 2026-09-26, after the 91-day and
+  legibility work, `drive-pages.mjs`, `drive-ui.mjs`, `drive-heatmap.mjs` (live
+  update 1293ms) and `drive-mobile.mjs` passed against the deployment, each
+  after a check that could only pass on the new build had confirmed it was the
+  one being served.
 - Vercel's own invoker authenticates against that route. Pressing **Run** on the
   Cron Jobs settings page on 2026-08-07 produced `GET 200 /api/cron/purge` in the
   runtime logs, so the platform does send `CRON_SECRET` as a bearer token and our
@@ -265,7 +308,13 @@ connectors.
    there is no account system, so where an OAuth refresh token would live has to
    be decided rather than assumed. Keeping it in the tab, and never on the
    server, is the answer consistent with `PLAN.md` §2.1.
-3. Optional, and only inside a one-hour window: watch one *scheduled* purge fire.
+3. Optional follow-ups to the long-room work, none started, and each worth
+   trying on a real phone before building: the painter's calendar marking which
+   dates you have already painted; an "apply this page to later pages" action;
+   digits inside heatmap cells (deferred on 2026-09-26 as likely too dense now
+   that the key carries counts and everyone-free carries a tick); and the 320px
+   send-card jump under Known Annoyances.
+4. Optional, and only inside a one-hour window: watch one *scheduled* purge fire.
    The credential question is answered — see Done — but by a manual Run rather
    than by the scheduler. The remaining gap can only be closed by being present
    while the evidence exists: the job fires between 04:00 and 04:59 UTC, and this
@@ -313,6 +362,19 @@ connectors.
   button on 2026-08-11, so a narrow room sits noticeably right of centre even
   with nothing open. Fixing it means deciding what the card's width should be
   driven by, which is more than a class change.
+- **Two driver scripts leave rooms in the live database.** `drive-mobile.mjs`
+  leaves its "Mobile pass" room on every run and says so; `drive-ui.mjs` has no
+  cleanup in its `finally`, so a run that aborts leaves "Two browser test"
+  behind. Both expire with their dates. To clear them sooner, delete by title
+  with the secret key, as was done after every run on 2026-09-26.
+- **On a 320px screen the send card moves the grid on the first painted slot.**
+  Its "Mark at least one slot" explanation wraps to one more line than the other
+  states at that width, so the grid rises 16px. 375px and wider measured
+  steady across all five states; shortening that sentence would fix 320px too.
+- **Migrations are applied by hand.** `.env.local` holds no database URL, so a
+  new file in `supabase/migrations/` does nothing until the user runs it in the
+  SQL editor; ask, and then probe the result directly rather than through the
+  API.
 - The count under the grid — "N of M slots marked free" — updates on release,
   not during a drag. The cell colours already preview the change; a count that
   jumps while dragging was judged noisier than useful.
@@ -321,6 +383,55 @@ connectors.
 
 ## Recent Decisions
 
+- **2026-09-26 — A room may cover the whole 91-day window, and a long one is a
+  calendar that zooms into pages of seven.** The user asked what "no limit"
+  would cost; the answer was almost nothing in data (2,912 characters of mask
+  at 30-minute slots) and everything in the grid, so the limit went and the grid
+  was redesigned around it. Two layouts, one per device, were rejected as two
+  apps to keep in step; one design with the page size as a parameter replaced
+  them. The calendar-then-zoom design was the user's. A page is seven
+  consecutive *room* dates starting at the one tapped, not a calendar week,
+  because a sparse room's weeks can hold one date. Slot indices stay room-wide
+  on every page — the renumbering sabotage failed five assertions. Each card
+  keeps its own page, so tapping a date in the results does not resize the card
+  above what is being read. `MAX_ROOM_DAYS` stays a check of its own rather than
+  being dropped, since it bounds the work before the per-date loop. The general
+  rule is in METHOD.md → Conventions.
+- **2026-09-26 — Migration `0004` uses `cardinality`, and so fixed a lower bound
+  that had never held.** Probing the relaxed constraint with direct inserts found
+  0 days accepted, as it had been since `0001`. No room with empty dates existed,
+  so the tighter constraint applied cleanly; the user ran it twice in the SQL
+  editor. In METHOD.md → Anti-Patterns.
+- **2026-09-26 — The results calendar colours each date by its peak, not an
+  average.** Raised by the user: the calendar showed dates and nothing else. A
+  day where everyone is free for an hour beats one where all but one are free
+  all evening, and an average ranks them the other way round. The painter's
+  calendar deliberately carries no counts, so painting is not steered by other
+  people's answers. The days last viewed are ringed rather than filled, leaving
+  the fill to the counts.
+- **2026-09-26 — The results card leads with its answer.** Best times moved
+  above the heatmap; the heading "When everyone is free" became "Who is free,
+  and when", because most of the grid is some of the people; the key moved above
+  the grid and names the people each step stands for; slots and dates that suit
+  everyone carry a tick once two have answered, so the deciding pair of greens
+  differs in shape as well as shade; the readout appears only beside a grid.
+  Text on each green was chosen by measured contrast, 4:1 or better. Digits in
+  the cells were offered and deferred.
+- **2026-09-26 — The send card says "Changes not sent yet" after an edit, and
+  stays where it is.** Reported by the user: after one send the card said Sent
+  forever. Moving it — a sticky bottom bar, below the grid, or both — was
+  offered, and the user's answer was that the state was the problem, not the
+  position: someone who sent once knows it went, and needs telling only that the
+  new edits have not. In METHOD.md → Conventions.
+- **2026-09-26 — A phone opens on the small grid, and small narrows to fit.**
+  Asked for by the user, together with the complaint that scrolling sideways was
+  awkward — a finger on the cells paints, leaving only the header and gutter to
+  scroll by. The first sabotage passed at 390px because fixed columns fit there
+  anyway; the 320px check that replaced it is what proves the columns give way.
+  The general rules are in METHOD.md → Verification and → Anti-Patterns.
+- **2026-09-26 — Each batch shipped as one commit.** Several files carry hunks
+  from more than one round, and only the final tree was verified, so splitting
+  would have claimed intermediate states nobody ran — the same reasoning as M4.
 - **2026-08-24 — The heatmap's colour ramp is measured, and a room uses only as
   many steps as it has people.** The user reported that the greens were all
   alike; against `bg-zinc-100` the old emerald-100→500 ramp measured 1.03:1 at
@@ -560,7 +671,7 @@ connectors.
   after the redeploy: `x-vercel-id` reports `hnd1` as the function region.
 - **2026-08-05 — Development and production share one Supabase project, and the
   triggers for splitting are written down.** A second project is not a
-  connection string: it is the three migrations, the region (fixed at creation),
+  connection string: it is the four migrations, the region (fixed at creation),
   "expose new tables" off, and enabling the legacy HS256 secret — two of which
   have already gone wrong once each, and both failures read as something else.
   It also doubles the idle-pause surface. The cost accepted in exchange is that
@@ -701,8 +812,8 @@ connectors.
   still names them explicitly, so the information is not lost, only unhighlighted.
 - **2026-07-26 — Both grids carry an accessible name, added when the second one
   appeared.** `SlotGrid` grew a `label` prop rendering `role="group"` with
-  `aria-label`; the painter is "Your busy times", the overlay is "Everyone's free
-  time". Without it `[data-slot="4"]` matched two elements and `drive-ui.mjs`
+  `aria-label`; the painter is "Your free times" (it was "Your busy times" until
+  the 2026-08-05 flip), the overlay is "Everyone's free time". Without it `[data-slot="4"]` matched two elements and `drive-ui.mjs`
   broke — the general rule is in METHOD.md → Conventions.
 - **2026-07-26 — `scripts/drive-heatmap.mjs` is kept, and creates its room
   through the API rather than the date picker.** Driving the picker is
@@ -810,9 +921,9 @@ connectors.
   passed. The user wants rooms planned months ahead rather than used once. See
   `PLAN.md` §4.3.
 - **2026-07-25 — Dates are an explicit array, not a contiguous range.** Any days
-  within the next 90 days, up to `MAX_ROOM_DAYS = 7`, not necessarily adjacent.
-  The cap is one constant precisely because the user expects to raise it. See
-  `PLAN.md` §3.1.
+  within the next 90 days, not necessarily adjacent. The cap started at
+  `MAX_ROOM_DAYS = 7`, one constant precisely because the user expected to raise
+  it, and was raised to 91 on 2026-09-26. See `PLAN.md` §3.1.
 - **2026-07-25 — Only a room's creator can delete it, using a secret issued once
   at creation.** Letting any member delete was rejected: one mistaken click
   destroys everyone's submissions, an asymmetric cost. See `PLAN.md` §2.4.
